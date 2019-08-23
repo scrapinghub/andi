@@ -1,0 +1,6 @@
+include CHANGES.rst
+include LICENSE
+include README.rst
+include andi/py.typed
+
+recursive-include tests *
