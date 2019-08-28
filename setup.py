@@ -7,6 +7,7 @@ setup(
     version='0.1',
     description='Library for annotation-based dependency injection',
     long_description=open('README.rst').read() + "\n\n" + open('CHANGES.rst').read(),
+    long_description_content_type='text/x-rst',
     author='Mikhail Korobov',
     author_email='kmike84@gmail.com',
     url='https://github.com/scrapinghub/andi',

@@ -47,7 +47,9 @@ this thing is useful.
 
 You're building a framework. This framework has code which calls some
 user-defined function (callback). Callback receives arguments
-``foo`` and ``bar``::
+``foo`` and ``bar``:
+
+.. code-block:: python
 
     def my_framework(callback):
         # ... compute foo and bar somehow
@@ -144,7 +146,9 @@ If a callback wants some input which framework can't provide,
 then some arguments are going to be  missing in kwargs,
 and Python can raise TypeError, as usual.
 It is possible to check it explicitly, to avoid doing unnecessary
-work creating values for other arguments::
+work creating values for other arguments:
+
+.. code-block:: python
 
     arguments = andi.inspect(callable)
     kwargs_to_provide = andi.to_provide(arguments,
@@ -156,7 +160,9 @@ work creating values for other arguments::
 
 ``andi`` support typing.Union. If an argument is annotated
 as ``Union[Foo, Bar]``, it means "both Foo and Bar objects are fine,
-but callable prefers Foo"::
+but callable prefers Foo":
+
+.. code-block:: python
 
     def callback4(x: Union[Baz, Bar, Foo]):
         pass
@@ -167,7 +173,9 @@ but callable prefers Foo"::
 
 ``andi`` also supports typing.Optional types. If an argument is annotated
 as optional, it means ``Union[<other types>, None]``. So usually framework
-specifies that None is OK, and provides it; None has the least priority::
+specifies that None is OK, and provides it; None has the least priority:
+
+.. code-block:: python
 
     def callback4(foo: Optional[Foo], baz: Optional[Baz]):
         pass
@@ -183,7 +191,9 @@ Constructor Dependency Injection
 --------------------------------
 
 It is common for frameworks to ask users to define classes with a certain
-interface, not just callbacks. ``andi`` can be used like this::
+interface, not just callbacks. ``andi`` can be used like this:
+
+.. code-block:: python
 
     class UserClass:
         def __init__(self, foo: Foo):
@@ -213,7 +223,9 @@ Recursive dependencies
 
 ``andi`` can be used on different levels in a framework. For example,
 framework supports callbacks which receive instances of
-some BaseClass subclasses::
+some BaseClass subclasses:
+
+.. code-block:: python
 
     class UserClass(framework.BaseClass):
         def __init__(self, foo: Foo):
@@ -273,13 +285,17 @@ Limitations:
 
 If your callable has two arguments of the same type, consider making them
 different types. For example, a callable may receive url and html of
-a web page::
+a web page:
+
+.. code-block:: python
 
     def parse(html: str, url: str):
         # ...
 
 To make it play well with ``andi``, you may define separate types for url
-and for html::
+and for html:
+
+.. code-block:: python
 
     class HTML(str):
         pass
@@ -292,7 +308,9 @@ and for html::
 
 This is more boilerplate though.
 
-You can also refactor ``parse`` to have a single argument::
+You can also refactor ``parse`` to have a single argument:
+
+.. code-block:: python
 
     @dataclass
     class Response:
