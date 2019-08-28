@@ -16,3 +16,14 @@ script: tox
 
 after_success:
 - codecov
+
+deploy:
+  provider: pypi
+  user: kmike
+  password:
+    secure: cWRMtlbtJlLl5SholxDds+jfQ4ZcGoMLLHbgzWTduBr19cQVxsUv/7xlo491FbFJDL/JYcTseRyOlKcuHiRzJWXqEK+g5JhiCwOE9F+xl9ICI86bvXsBOL37eQ9SgY3ffDo44cImkue/Qs4fzQBXZ4x9HTZuxSvV24jN0JMebUJNL/ARoJWZsOWeS2hG7Q0aaIY65nrZzfz1IdRcVG0lmrWW3j5+v6wfKnKWSbwodZfPj7gZcmUxl6+bDETDl3L+UUe+iU6va2U3Y7SKuJm6HNczscYRwFWXPI9f0+YfSvBOxACltICLco3BRJdoRiq0mOVbbmUb50Rb+Fmfq2g3dyj1YKvoXeB53hX9ikpQDQiIvsJQIPQqbTJK6pK5vFEyHAiKTEKwuC0I2ed0T/Jt2HR0CjYsyMY9g3/aC6Eq1se5ySmzqEZZBN1A0JSZsf2XG/+5vSvo2ITOf9c6f1OTD8xBO+Uu7p4LeCQxAC3dMGxtlKQHsQmM91Dbg8M5qKzT/elFeTx0TS4Di5cGKg5/WBg/R3FiUVBQRp+AqrEW82zcFrmo+AyM0zhr2qyFGG8/tetEFtw9tVl3mupYBTh4nIZYe+z8SL7xJhyKq2Qz2iKGM6yn1gOy1Zh8SN0Ho1Rdu3GJyJWpQii8MZ2fO+xKDXYiWuLtQK0JjDrbWQxDcQA=
+  on:
+    tags: true
+    repo: scrapinghub/andi
+    condition: $TOXENV == py37
+  distributions: "sdist bdist_wheel"
