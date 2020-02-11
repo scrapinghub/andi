@@ -10,7 +10,8 @@ from andi.typeutils import get_union_args, is_union
 
 
 def _get_globalns_as_get_type_hints(func) -> Dict:
-    """ Global namespace resolution extracted from ``get_type_hints`` method """
+    """ Global namespace resolution extracted from ``get_type_hints`` method.
+     Python 3.7 (https://github.com/python/cpython/blob/3.7/Lib/typing.py#L981-L988) """
     if isinstance(func, types.ModuleType):
         return func.__dict__
     else:
