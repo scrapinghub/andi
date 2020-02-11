@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
-import inspect
+from functools import wraps
 from typing import Union, Optional, TypeVar, Type
-
-import attr
-import pytest
 
 import andi
 
@@ -121,20 +118,15 @@ def test_classmethod():
     assert andi.to_provide(MyClass.from_foo, {Foo, Bar}) == {'foo': Foo}
 
 
-@pytest.mark.xfail
-def test_attrs_string_type_references():
-    """ ``get_type_hint`` function fails on attrs classes that reference
-    a type using a string (see class A below for an example). The reason
-    is that ``__init__.__globals__`` original content is lost by attrs.
-    See https://github.com/python-attrs/attrs/issues/593
-    """
-    @attr.s(auto_attribs=True)
-    class A:
-        b: 'B'
+def test_decorated():
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            return fn(*args, **kwargs)
+        return wrapper
 
-    @attr.s(auto_attribs=True)
-    class B:
-        a: A
+    @decorator
+    def func(x: 'Bar'):
+        pass
 
-    assert andi.inspect(B.__init__) == {'a': [A]}
-    assert andi.inspect(A.__init__) == {'b': [B]}
+    assert andi.inspect(func) == {'x': [Bar]}
