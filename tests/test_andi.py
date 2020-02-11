@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from functools import wraps
 from typing import Union, Optional, TypeVar, Type
 
 import andi
@@ -116,3 +117,16 @@ def test_classmethod():
     assert andi.inspect(MyClass.from_foo) == {'foo': [Foo]}
     assert andi.to_provide(MyClass.from_foo, {Foo, Bar}) == {'foo': Foo}
 
+
+def test_decorated():
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            return fn(*args, **kwargs)
+        return wrapper
+
+    @decorator
+    def func(x: 'Bar'):
+        pass
+
+    assert andi.inspect(func) == {'x': [Bar]}

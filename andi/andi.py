@@ -9,20 +9,18 @@ from typing import (
 from andi.typeutils import get_union_args, is_union
 
 
-def _get_globalns_as_get_type_hints(func) -> Dict:
+def _get_globalns_as_get_type_hints(func: Callable) -> Dict:
     """ Global namespace resolution extracted from ``get_type_hints`` method.
-     Python 3.7 (https://github.com/python/cpython/blob/3.7/Lib/typing.py#L981-L988) """
-    if isinstance(func, types.ModuleType):
-        return func.__dict__
-    else:
-        nsobj = func
-        # Find globalns for the unwrapped object.
-        while hasattr(nsobj, '__wrapped__'):
-            nsobj = nsobj.__wrapped__
-        return getattr(nsobj, '__globals__', {})
+    Python 3.7 (https://github.com/python/cpython/blob/3.7/Lib/typing.py#L981-L988)
+    Note that this is only supporting functions as input. """
+    nsobj = func
+    # Find globalns for the unwrapped object.
+    while hasattr(nsobj, '__wrapped__'):
+        nsobj = getattr(nsobj, '__wrapped__')
+    return getattr(nsobj, '__globals__', {})
 
 
-def _get_globalns_for_attrs(func) -> Dict:
+def _get_globalns_for_attrs(func: Callable) -> Dict:
     """ Adds partial support for postponed type annotations in attrs classes.
     Also required to support attrs classes when
     ``from __future__ import annotations`` is used (default for python 4.0).
@@ -30,7 +28,7 @@ def _get_globalns_for_attrs(func) -> Dict:
     return dict(sys.modules[func.__module__].__dict__)
 
 
-def _get_globalns(func) -> Dict:
+def _get_globalns(func: Callable) -> Dict:
     """ Returns the global namespace that will be used for the resolution
     of postponed type annotations """
     ns = dict(_get_globalns_for_attrs(func))
