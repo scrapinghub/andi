@@ -25,7 +25,15 @@ def _get_globalns_for_attrs(func: Callable) -> Dict:
     Also required to support attrs classes when
     ``from __future__ import annotations`` is used (default for python 4.0).
     See https://github.com/python-attrs/attrs/issues/593 """
-    return dict(sys.modules[func.__module__].__dict__)
+    if func.__module__ in sys.modules:
+        return dict(sys.modules[func.__module__].__dict__)
+    else:
+        # Theoretically this can happen if someone writes
+        # a custom string to func.__module__.  In which case
+        # such attrs might not be fully introspectable
+        # (w.r.t. typing.get_type_hints) but will still function
+        # correctly.
+        return {}
 
 
 def _get_globalns(func: Callable) -> Dict:
