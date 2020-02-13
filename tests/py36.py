@@ -1,6 +1,6 @@
-import attr
+from dataclasses import dataclass
 
-import andi
+import attr
 
 
 @attr.s(auto_attribs=True)
@@ -13,14 +13,11 @@ class B_36:
     a: A_36
 
 
-def cross_referenced_within_func():
+@dataclass
+class ADC:
+    b: 'BDC'
 
-    @attr.s(auto_attribs=True)
-    class A:
-        b: 'B'
 
-    @attr.s(auto_attribs=True)
-    class B:
-        a: A
-
-    return andi.inspect(A.__init__), andi.inspect(B.__init__)
+@dataclass
+class BDC:
+    a: ADC
