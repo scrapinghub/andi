@@ -83,5 +83,3 @@ def _get_globalns_for_attrs(func: Callable) -> Dict:
         # (w.r.t. typing.get_type_hints) but will still function
         # correctly.
         return {}
-
-
