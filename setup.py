@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='andi',
-    version='0.1.0',
+    version='0.2.0',
     description='Library for annotation-based dependency injection',
     long_description=open('README.rst').read() + "\n\n" + open('CHANGES.rst').read(),
     long_description_content_type='text/x-rst',
