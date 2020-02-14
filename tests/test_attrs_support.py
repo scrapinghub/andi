@@ -15,7 +15,7 @@ def test_attrs_str_type_annotations_py36():
 
 @pytest.mark.skipif(sys.version_info < (3, 7),
                     reason="'from __future__ import annotations' require Python 3.7 or higher")
-def test_attrs_str_type_annotations_py37():
-    from py37 import A_37, B_37
+def test_attrs_pep_563_forward_type_annotations_py37():
+    from py37_pep_563 import A_37, B_37
     assert andi.inspect(B_37.__init__) == {'a': [A_37]}
     assert andi.inspect(A_37.__init__) == {'b': [B_37]}
