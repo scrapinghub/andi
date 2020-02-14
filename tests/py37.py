@@ -1,13 +1,11 @@
-from __future__ import annotations  # type: ignore
-
-import attr
+from dataclasses import dataclass
 
 
-@attr.s(auto_attribs=True)
-class A_37:
-    b: B_37
+@dataclass
+class ADCnp:
+    b: 'BDCnp'
 
 
-@attr.s(auto_attribs=True)
-class B_37:
-    a: A_37
+@dataclass
+class BDCnp:
+    a: ADCnp

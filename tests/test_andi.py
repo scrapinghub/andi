@@ -2,6 +2,8 @@
 from functools import wraps
 from typing import Union, Optional, TypeVar, Type
 
+import pytest
+
 import andi
 
 
@@ -95,6 +97,22 @@ def test_string_types():
         pass
     assert andi.inspect(func) == {'x': [Bar]}
     assert andi.to_provide(func, {Foo, Bar}) == {'x': Bar}
+
+
+def test_string_types_with_fn():
+    """ String type references not supported for __init__ in classes declared
+    within functions """
+
+    class Fuu:
+        def __init__(self, bur :'Bur'):
+            pass
+
+    class Bur:
+        pass
+
+    with pytest.raises(NameError):
+        andi.inspect(Fuu.__init__)
+
 
 
 def test_init_methods():
