@@ -117,7 +117,7 @@ Usage
 
 
     def my_framework(callback):
-        kwargs_to_provide = andi.to_provide(callable,
+        kwargs_to_provide = andi.to_provide(callback,
                                             can_provide={Foo, Bar, None})
         # for my_callback: kwargs_to_provide == {'foo': Foo}
 
