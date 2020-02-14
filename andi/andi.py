@@ -71,53 +71,78 @@ def to_provide(
 Plan = typing.OrderedDict[Type, Dict[str, Type]]
 
 
-def plan(cls: Type,
+def plan(arguments_or_class: Union[
+            Type,
+            Dict[str, List[Optional[Type]]]
+         ],
          can_provide: TypeContainerOrCallable,
          externally_provided: TypeContainerOrCallable) -> Plan:
     """ TODO: Here the docstring """
-    _plan(cls, can_provide, externally_provided, None)
-
-
-def _plan(cls: Type,
-         can_provide: TypeContainerOrCallable,
-         externally_provided: TypeContainerOrCallable,
-         _dependency_stack=None) -> Plan:
-    _dependency_stack = _dependency_stack or []
     if isinstance(can_provide, Container):
         can_provide = can_provide.__contains__
     if isinstance(externally_provided, Container):
         externally_provided = externally_provided.__contains__
+    return _plan(arguments_or_class, can_provide, externally_provided, None)
 
+
+def _plan(arguments_or_class: Union[
+            Type,
+            Dict[str, List[Optional[Type]]]
+          ],
+          can_provide: Callable[[Optional[Type]], bool],
+          externally_provided: Callable[[Optional[Type]], bool],
+          dependency_stack=None) -> Plan:
+    dependency_stack = dependency_stack or []
     tasks: Plan = OrderedDict()
     type_for_arg: Dict[str, Type] = {}
 
-    if externally_provided(cls):
-        tasks[cls] = {}
-        return tasks
+    input_is_type = isinstance(arguments_or_class, Type)
 
-    if cls in _dependency_stack:
-        raise TypeError("Cyclic dependency found. Dependency graph: {}".format(
-            " -> ".join(as_class_names(_dependency_stack + [cls]))))
-    _dependency_stack = _dependency_stack + [cls]
+    if input_is_type:
+        cls: Type = arguments_or_class
+        if not can_provide(cls):
+            raise TypeError(f"Type {as_class_names(cls)} cannot be provided")
 
-    for argname, types in inspect(cls).items():
-        sel_cls = None
-        for candidate in types:
-            if can_provide(candidate):
-                sel_cls = candidate
-                break
+        if externally_provided(cls):
+            tasks[cls] = {}
+            return tasks
 
+        if cls in dependency_stack:
+            raise TypeError("Cyclic dependency found. Dependency graph: {}".format(
+                " -> ".join(as_class_names(dependency_stack + [cls]))))
+        dependency_stack = dependency_stack + [cls]
+        params_list = inspect(cls)
+    else:
+        params_list = arguments_or_class
+
+    for argname, types in params_list.items():
+        sel_cls = select_type(types, can_provide)
         if sel_cls:
             if sel_cls not in tasks:
                 tasks.update((_plan(sel_cls, can_provide, externally_provided,
-                                   _dependency_stack)))
+                                    dependency_stack)))
         else:
-            raise TypeError(f"Any of {as_class_names(types)} types are required "
-                            f"for {as_class_names(cls)} but none can be provided")
+            msg = f"Any of {as_class_names(types)} types are required "
+            if input_is_type:
+                msg += f"in {as_class_names(arguments_or_class)} __init__ " \
+                       f"but none can be provided"
+            else:
+                msg += f"for the argument {argname} but none can be provided"
+            raise TypeError(msg)
         type_for_arg[argname] = sel_cls
 
-    tasks[cls] = type_for_arg
+    if input_is_type:
+        tasks[cls] = type_for_arg
     return tasks
+
+
+def select_type(types, can_provide):
+    sel_cls = None
+    for candidate in types:
+        if can_provide(candidate):
+            sel_cls = candidate
+            break
+    return sel_cls
 
 
 def build(plan: Plan, stock: Optional[Dict[Type, Any]] = None):
