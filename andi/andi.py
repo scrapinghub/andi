@@ -70,6 +70,14 @@ def to_provide(
 Plan = typing.Dict[Type, Dict[str, Type]]
 
 
+class NonProvidableError(TypeError):
+    """ Raised when a type is not providable """
+
+
+class CyclicDependencyError(TypeError):
+    """ Raised on cyclic dependencies """
+
+
 def plan(arguments_or_class: Union[
             Type,
             Dict[str, List[Optional[Type]]]
@@ -77,6 +85,8 @@ def plan(arguments_or_class: Union[
          can_provide: TypeContainerOrCallable,
          externally_provided: TypeContainerOrCallable) -> Plan:
     """ TODO: Here the docstring """
+    assert can_provide is not None
+    assert externally_provided is not None
     if isinstance(can_provide, Container):
         can_provide = can_provide.__contains__
     if isinstance(externally_provided, Container):
@@ -100,15 +110,17 @@ def _plan(arguments_or_class: Union[
     if input_is_type:
         cls = typing.cast(Type, arguments_or_class)
         if not can_provide(cls):
-            raise TypeError("Type {} cannot be provided".format(as_class_names(cls)))
+            raise NonProvidableError(
+                "Type {} cannot be provided".format(as_class_names(cls)))
 
         if externally_provided(cls):
             tasks[cls] = {}
             return tasks
 
         if cls in dependency_stack:
-            raise TypeError("Cyclic dependency found. Dependency graph: {}".format(
-                " -> ".join(as_class_names(dependency_stack + [cls]))))
+            raise CyclicDependencyError(
+                "Cyclic dependency found. Dependency graph: {}".format(
+                    " -> ".join(as_class_names(dependency_stack + [cls]))))
         dependency_stack = dependency_stack + [cls]
         params_list = inspect(cls.__init__)
     else:
@@ -127,7 +139,7 @@ def _plan(arguments_or_class: Union[
                     as_class_names(arguments_or_class))
             else:
                 msg += "for the argument {} but none can be provided".format(argname)
-            raise TypeError(msg)
+            raise NonProvidableError(msg)
         type_for_arg[argname] = sel_cls
 
     if input_is_type:

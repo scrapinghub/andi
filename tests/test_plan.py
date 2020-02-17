@@ -1,45 +1,98 @@
-from dataclasses import dataclass
+from typing import Union
 
 import pytest
 
 import andi
 
 
-@dataclass
 class A:
-    e: 'E'
+    def __init__(self, e: 'E'): pass
 
 
-@dataclass
 class B: pass
 
 
-@dataclass
 class C:
-    a: A
-    b: B
+    def __init__(self, a: A, b: B): pass
 
 
-@dataclass
 class D:
-    a: A
-    c: C
+    def __init__(self, a: A, c: C): pass
 
 
-@dataclass
 class E:
-    b: B
-    c: C
-    d: D
+    def __init__(self, b: B, c: C, d: D): pass
 
+
+ALL = [A, B, C, D, E]
+SOME = [A, B, C]
 
 def test_plan_and_build():
     plan = andi.plan(E, lambda x: True, [A])
-    print(andi.plan_str(plan))
+
+    assert set(list(plan.keys())[:2]) == {A, B}
+    assert list(plan.values())[:2] == [{}, {}]
+    assert list(plan.items())[2:] == [
+        (C, {'a': A, 'b': B}),
+        (D, {'a': A, 'c': C}),
+        (E, {'b': B, 'c': C, 'd': D})
+    ]
     instances = andi.build(plan, {A: ""})
     assert type(instances[E]) == E
 
 
 def test_cyclic_dependency():
-    with pytest.raises(TypeError):
+    andi.plan(E, lambda x: True, [A])  # No error if externally provided
+    with pytest.raises(andi.CyclicDependencyError):
         andi.plan(E, lambda x: True, [])
+
+
+@pytest.mark.parametrize("cls,can_provide,externally_provided", [
+    (E, ALL, SOME),
+    (C, SOME, ALL),
+    (E, ALL, ALL)
+])
+def test_plan_container_or_func(cls, can_provide, externally_provided):
+    plan_func = andi.plan(cls, can_provide.__contains__,
+                          externally_provided.__contains__)
+    plan_container = andi.plan(cls, can_provide, externally_provided)
+    assert plan_func == plan_container
+
+
+def test_cannot_be_provided():
+    class WithB:
+        def __init__(self, b: B): pass
+
+    plan = list(andi.plan(WithB, [WithB, B], [B]).items())
+    assert plan == [(B, {}), (WithB, {"b": B})]
+    with pytest.raises(andi.NonProvidableError):
+        andi.plan(WithB, [WithB], [])
+
+    class WithOptionals:
+        def __init__(self, a_or_b: Union[A, B]): pass
+
+    plan = list(andi.plan(WithOptionals, [WithOptionals, A, B], [A]).items())
+    assert plan == [(A, {}), (WithOptionals, {'a_or_b': A})]
+
+    plan = list(andi.plan(WithOptionals, [WithOptionals, B], [A]).items())
+    assert plan == [(B, {}), (WithOptionals, {'a_or_b': B})]
+
+    with pytest.raises(andi.NonProvidableError):
+        andi.plan(WithOptionals, [WithOptionals], [A]).items()
+
+
+def test_externally_provided():
+    plan = andi.plan(E, ALL, ALL)
+    assert plan == {E: {}}
+
+    plan = andi.plan(E, ALL, [A, B, C, D])
+    assert plan.keys() == {B, C, D, E}
+    assert list(plan.keys())[-1] == E
+    assert plan[E] == {'b': B, 'c': C, 'd': D}
+
+    plan = andi.plan(E, ALL, [A, B, D])
+    seq = list(plan.keys())
+    assert set(seq[:2]) == {A, B}
+    assert seq[2:] == [C, D, E]
+    assert plan[C] == {'a': A, 'b': B}
+    assert plan[E] == {'b': B, 'c': C, 'd': D}
