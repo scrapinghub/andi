@@ -68,6 +68,8 @@ def test_cannot_be_provided():
     assert plan == [(B, {}), (WithB, {"b": B})]
     with pytest.raises(andi.NonProvidableError):
         andi.plan(WithB, [WithB], [])
+    with pytest.raises(andi.NonProvidableError):
+        andi.plan(WithB, [], [])
 
     class WithOptionals:
         def __init__(self, a_or_b: Union[A, B]): pass
