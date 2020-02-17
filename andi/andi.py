@@ -3,11 +3,10 @@ import typing
 from collections import OrderedDict
 from typing import (
     Any, Dict, List, Optional, Type, Callable, Union, Container,
-    get_type_hints,
-    Tuple)
+    get_type_hints)
 
 from andi.typeutils import get_union_args, is_union, get_globalns
-from utils import as_class_names
+from andi.utils import as_class_names
 
 
 def inspect(func: Callable) -> Dict[str, List[Optional[Type]]]:
@@ -68,7 +67,7 @@ def to_provide(
     return result
 
 
-Plan = typing.OrderedDict[Type, Dict[str, Type]]
+Plan = typing.Dict[Type, Dict[str, Type]]
 
 
 def plan(arguments_or_class: Union[
@@ -93,15 +92,15 @@ def _plan(arguments_or_class: Union[
           externally_provided: Callable[[Optional[Type]], bool],
           dependency_stack=None) -> Plan:
     dependency_stack = dependency_stack or []
-    tasks: Plan = OrderedDict()
-    type_for_arg: Dict[str, Type] = {}
+    tasks = OrderedDict()  # type: Plan
+    type_for_arg = {}
 
-    input_is_type = isinstance(arguments_or_class, Type)
+    input_is_type = isinstance(arguments_or_class, type)
 
     if input_is_type:
-        cls: Type = arguments_or_class
+        cls = typing.cast(Type, arguments_or_class)
         if not can_provide(cls):
-            raise TypeError(f"Type {as_class_names(cls)} cannot be provided")
+            raise TypeError("Type {} cannot be provided".format(as_class_names(cls)))
 
         if externally_provided(cls):
             tasks[cls] = {}
@@ -113,7 +112,7 @@ def _plan(arguments_or_class: Union[
         dependency_stack = dependency_stack + [cls]
         params_list = inspect(cls)
     else:
-        params_list = arguments_or_class
+        params_list = typing.cast(Dict[str, List[Optional[Type]]], arguments_or_class)
 
     for argname, types in params_list.items():
         sel_cls = select_type(types, can_provide)
@@ -122,12 +121,12 @@ def _plan(arguments_or_class: Union[
                 tasks.update((_plan(sel_cls, can_provide, externally_provided,
                                     dependency_stack)))
         else:
-            msg = f"Any of {as_class_names(types)} types are required "
+            msg = "Any of {} types are required ".format(as_class_names(types))
             if input_is_type:
-                msg += f"in {as_class_names(arguments_or_class)} __init__ " \
-                       f"but none can be provided"
+                msg += "in {} __init__ but none can be provided".format(
+                    as_class_names(arguments_or_class))
             else:
-                msg += f"for the argument {argname} but none can be provided"
+                msg += "for the argument {} but none can be provided".format(argname)
             raise TypeError(msg)
         type_for_arg[argname] = sel_cls
 
