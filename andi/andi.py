@@ -110,7 +110,7 @@ def _plan(arguments_or_class: Union[
             raise TypeError("Cyclic dependency found. Dependency graph: {}".format(
                 " -> ".join(as_class_names(dependency_stack + [cls]))))
         dependency_stack = dependency_stack + [cls]
-        params_list = inspect(cls)
+        params_list = inspect(cls.__init__)
     else:
         params_list = typing.cast(Dict[str, List[Optional[Type]]], arguments_or_class)
 
