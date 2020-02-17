@@ -31,6 +31,7 @@ def test_andi():
     def func3(x: Bar, y: Foo):
         pass
 
+    assert andi.inspect(Foo.__init__) == {}
     assert andi.inspect(func1) == {'x': [Foo]}
     assert andi.inspect(func2) == {}
     assert andi.inspect(func3) == {'x': [Bar], 'y': [Foo]}
