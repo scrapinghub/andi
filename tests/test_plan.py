@@ -92,7 +92,11 @@ def test_externally_provided():
 
     plan = andi.plan(E, ALL, [A, B, D])
     seq = list(plan.keys())
-    assert set(seq[:2]) == {A, B}
-    assert seq[2:] == [C, D, E]
+    assert seq.index(A) < seq.index(C)
+    assert seq.index(B) < seq.index(C)
+    assert seq.index(D) < seq.index(E)
+    assert seq.index(C) < seq.index(E)
+    for cls in (A, B, D):
+        assert plan[cls] == {}
     assert plan[C] == {'a': A, 'b': B}
     assert plan[E] == {'b': B, 'c': C, 'd': D}
