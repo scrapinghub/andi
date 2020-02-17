@@ -78,26 +78,57 @@ class CyclicDependencyError(TypeError):
     """ Raised on cyclic dependencies """
 
 
-def plan(arguments_or_class: Union[
-            Type,
-            Dict[str, List[Optional[Type]]]
-         ],
+def plan(class_or_func: Union[Type, Callable],
          can_provide: TypeContainerOrCallable,
          externally_provided: TypeContainerOrCallable) -> Plan:
-    """ TODO: Here the docstring """
+    """ Check if it is possible to fulfill the arguments to invoke the input
+    function (or to the create the input class if a class is given). If possible
+    then a plan to build the requirements is returned. This plan is
+    an ``OrderedDict`` containing the proper instantiation order
+    for each type so that the dependencies existence is assured. The keys in
+    this plan are the type, and the values are dicts where the keys are the
+    params names and the values  are the type required for this parameter.
+
+    This function recursively checks for dependencies. If a cyclic dependency is
+    found the error ``CyclicDependencyError`` is raised.
+
+    :param class_or_func: If a class is provided this function will create
+                          a plan to fulfil its ``__init__`` method. The class
+                          itself will be part of the plan in the las position.
+                          If a plan for all the requirements cannot be created
+                          the function will fail with ``NonProvidableError``.
+                          If a method is given then this function will try
+                          to create a plan to create all its arguments, but it
+                          won't fail if all the required parameters cannot
+                          be fulfilled. A partial plan is returned instead.
+    :param can_provide: A predicate or a dictionary that says if a class
+                        is providable. Any required class found
+                        by this function should be providable, otherwise,
+                        ``NonProvidableError`` will be raised. There one single
+                        exception for that: if a function is received as
+                        input then non providable arguments
+                        are allowed for the function itself. They won't be
+                        in the returned plan. It is the caller responsibility
+                        to deal with this case.
+    :param externally_provided: A predicate or a dictionary that says if a class
+                                will be provided externally.
+                                This function won't try to resolve its
+                                dependencies, so it acts as a way to stop
+                                dependency injection for these classes where
+                                we don't want it because they will be provided by
+                                other means.
+    :return: The plan ready to be used as ``build`` method input.
+    """
     assert can_provide is not None
     assert externally_provided is not None
     if isinstance(can_provide, Container):
         can_provide = can_provide.__contains__
     if isinstance(externally_provided, Container):
         externally_provided = externally_provided.__contains__
-    return _plan(arguments_or_class, can_provide, externally_provided, None)
+    return _plan(class_or_func, can_provide, externally_provided, None)
 
 
-def _plan(arguments_or_class: Union[
-            Type,
-            Dict[str, List[Optional[Type]]]
-          ],
+def _plan(class_or_func: Union[Type, Callable],
           can_provide: Callable[[Optional[Type]], bool],
           externally_provided: Callable[[Optional[Type]], bool],
           dependency_stack=None) -> Plan:
@@ -105,10 +136,10 @@ def _plan(arguments_or_class: Union[
     tasks = OrderedDict()  # type: Plan
     type_for_arg = {}
 
-    input_is_type = isinstance(arguments_or_class, type)
+    input_is_type = isinstance(class_or_func, type)
 
     if input_is_type:
-        cls = typing.cast(Type, arguments_or_class)
+        cls = typing.cast(Type, class_or_func)
         if not can_provide(cls):
             raise NonProvidableError(
                 "Type {} cannot be provided".format(as_class_names(cls)))
@@ -122,11 +153,11 @@ def _plan(arguments_or_class: Union[
                 "Cyclic dependency found. Dependency graph: {}".format(
                     " -> ".join(as_class_names(dependency_stack + [cls]))))
         dependency_stack = dependency_stack + [cls]
-        params_list = inspect(cls.__init__)
+        arguments = inspect(cls.__init__)
     else:
-        params_list = typing.cast(Dict[str, List[Optional[Type]]], arguments_or_class)
+        arguments = inspect(class_or_func)
 
-    for argname, types in params_list.items():
+    for argname, types in arguments.items():
         sel_cls = select_type(types, can_provide)
         if sel_cls:
             if sel_cls not in tasks:
@@ -138,7 +169,7 @@ def _plan(arguments_or_class: Union[
             if input_is_type:
                 msg = "Any of {} types are required ".format(as_class_names(types))
                 msg += " in {} __init__ but none can be provided".format(
-                        as_class_names(arguments_or_class))
+                        as_class_names(class_or_func))
                 raise NonProvidableError(msg)
 
     if input_is_type:
@@ -156,6 +187,7 @@ def select_type(types, can_provide):
 
 
 def build(plan: Plan, stock: Optional[Dict[Type, Any]] = None):
+    """ TODO: write doc """
     stock = stock or {}
     instances = {}
     for cls, params in plan.items():

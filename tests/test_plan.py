@@ -109,7 +109,7 @@ def test_plan_for_func():
         assert type(e) == E
         assert type(c) == C
 
-    plan = andi.plan(andi.inspect(fn), ALL, [A])
+    plan = andi.plan(fn, ALL, [A])
     instances = andi.build(plan, {A: ""})
     kwargs = dict(other="yeah!", e=instances[E], c=instances[C])
     fn(**kwargs)
