@@ -132,15 +132,14 @@ def _plan(arguments_or_class: Union[
             if sel_cls not in tasks:
                 tasks.update((_plan(sel_cls, can_provide, externally_provided,
                                     dependency_stack)))
+            type_for_arg[argname] = sel_cls
         else:
-            msg = "Any of {} types are required ".format(as_class_names(types))
+            # Non fulfilling all deps is allowed for non type inputs.
             if input_is_type:
-                msg += "in {} __init__ but none can be provided".format(
-                    as_class_names(arguments_or_class))
-            else:
-                msg += "for the argument {} but none can be provided".format(argname)
-            raise NonProvidableError(msg)
-        type_for_arg[argname] = sel_cls
+                msg = "Any of {} types are required ".format(as_class_names(types))
+                msg += " in {} __init__ but none can be provided".format(
+                        as_class_names(arguments_or_class))
+                raise NonProvidableError(msg)
 
     if input_is_type:
         tasks[cls] = type_for_arg

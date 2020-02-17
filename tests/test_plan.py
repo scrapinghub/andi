@@ -3,6 +3,7 @@ from typing import Union
 import pytest
 
 import andi
+from andi import plan_str
 
 
 class A:
@@ -100,3 +101,17 @@ def test_externally_provided():
         assert plan[cls] == {}
     assert plan[C] == {'a': A, 'b': B}
     assert plan[E] == {'b': B, 'c': C, 'd': D}
+
+
+def test_plan_for_func():
+    def fn(other: str, e: E, c: C):
+        assert other == 'yeah!'
+        assert type(e) == E
+        assert type(c) == C
+
+    plan = andi.plan(andi.inspect(fn), ALL, [A])
+    instances = andi.build(plan, {A: ""})
+    kwargs = dict(other="yeah!", e=instances[E], c=instances[C])
+    fn(**kwargs)
+
+
