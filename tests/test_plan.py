@@ -3,7 +3,8 @@ from typing import Union, Optional
 import pytest
 
 import andi
-from andi import plan_str, FunctionArguments
+from andi import plan_str, FunctionArguments, CyclicDependencyError, \
+    NonProvidableError
 
 
 class A:
@@ -127,3 +128,16 @@ def test_plan_with_optionals():
     plan = andi.plan(fn, [type(None)], [])
     assert plan == {type(None): {}, FunctionArguments: {'a': type(None)}}
     assert andi.build(plan)[type(None)] == None
+
+
+def test_plan_bindings():
+    assert andi.plan(A, ALL, [], {A: B}.get) == {B: {}}
+    assert andi.plan(C, ALL, [], {A: B}.get) == {B: {}, C: {'a': B, 'b': B}}
+    assert andi.plan(C, ALL, [A], {A: B, B: A}.get) == {
+        B: {},
+        A: {},
+        C: {'a': B, 'b': A}}
+    with pytest.raises(CyclicDependencyError):
+        andi.plan(C, ALL, [], {A: C}.get)
+    with pytest.raises(NonProvidableError):
+        andi.plan(C, ALL, [], {A: str}.get)

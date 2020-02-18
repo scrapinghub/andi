@@ -23,10 +23,11 @@ def get_union_args(tp) -> List:
     return list(tp.__args__)
 
 
-def select_type(types, can_provide):
+def select_type(types, can_provide, bindings):
     """ Choose the first type that can be provided. None otherwise. """
     sel_cls = None
     for candidate in types:
+        candidate = bindings(candidate) or candidate
         if can_provide(candidate):
             sel_cls = candidate
             break

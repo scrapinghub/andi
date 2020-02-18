@@ -37,7 +37,8 @@ def to_provide(
             Callable,
             Dict[str, List[Optional[Type]]]
         ],
-        can_provide: TypeContainerOrCallable
+        can_provide: TypeContainerOrCallable,
+        bindings: Callable[[Type], Optional[Type]] = None,
         ) -> Dict[str, Optional[Type]]:
     """
     Return a dictionary ``{argument_name: type}`` with types which should
@@ -58,9 +59,10 @@ def to_provide(
     if isinstance(can_provide, Container):
         can_provide = can_provide.__contains__
 
+    bindings = bindings or (lambda x: None)
     result = {}
     for argname, types in arguments.items():
-        sel_cls = select_type(types, can_provide)
+        sel_cls = select_type(types, can_provide, bindings)
         if sel_cls:
             result[argname] = sel_cls
     return result
@@ -85,7 +87,8 @@ class FunctionArguments:
 
 def plan(class_or_func: Union[Type, Callable],
          can_provide: TypeContainerOrCallable,
-         externally_provided: TypeContainerOrCallable) -> Plan:
+         externally_provided: TypeContainerOrCallable,
+         bindings: Callable[[Type], Optional[Type]] = None) -> Plan:
     """ Check if it is possible to fulfill the arguments to invoke the input
     function (or to the create the input class if a class is given). If possible
     then a plan to build the requirements is returned. This plan is
@@ -137,12 +140,17 @@ def plan(class_or_func: Union[Type, Callable],
         can_provide = can_provide.__contains__
     if isinstance(externally_provided, Container):
         externally_provided = externally_provided.__contains__
-    return _plan(class_or_func, can_provide, externally_provided, None)
+    bindings = bindings or (lambda x: None)
+    if isinstance(class_or_func, type):
+        # This covers applying binding to input class itself
+        class_or_func = bindings(class_or_func) or class_or_func
+    return _plan(class_or_func, can_provide, externally_provided, bindings, None)
 
 
 def _plan(class_or_func: Union[Type, Callable],
           can_provide: Callable[[Optional[Type]], bool],
           externally_provided: Callable[[Optional[Type]], bool],
+          bindings: Callable[[Type], Optional[Type]],
           dependency_stack=None) -> Plan:
     dependency_stack = dependency_stack or []
     plan_seq = OrderedDict()  # type: Plan
@@ -170,11 +178,11 @@ def _plan(class_or_func: Union[Type, Callable],
         arguments = inspect(class_or_func)
 
     for argname, types in arguments.items():
-        sel_cls = select_type(types, can_provide)
+        sel_cls = select_type(types, can_provide, bindings)
         if sel_cls is not None:
             if sel_cls not in plan_seq:
                 plan_seq.update(_plan(sel_cls, can_provide, externally_provided,
-                                    dependency_stack))
+                                      bindings, dependency_stack))
             type_for_arg[argname] = sel_cls
         else:
             # Non fulfilling all deps is allowed for non type inputs.
@@ -183,7 +191,6 @@ def _plan(class_or_func: Union[Type, Callable],
                 msg += " in {} __init__ but none can be provided".format(
                         as_class_names(class_or_func))
                 raise NonProvidableError(msg)
-
 
     plan_seq[cls if input_is_type else FunctionArguments] = type_for_arg
     return plan_seq
