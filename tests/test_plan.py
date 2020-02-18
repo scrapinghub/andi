@@ -3,7 +3,7 @@ from typing import Union, Optional
 import pytest
 
 import andi
-from andi import plan_str
+from andi import plan_str, FunctionArguments
 
 
 class A:
@@ -112,6 +112,7 @@ def test_plan_for_func():
         assert type(c) == C
 
     plan = andi.plan(fn, ALL, [A])
+    assert list(plan.items())[-1] == (FunctionArguments, {'e': E, 'c': C})
     instances = andi.build(plan, {A: ""})
     kwargs = dict(other="yeah!", e=instances[E], c=instances[C])
     fn(**kwargs)
@@ -121,7 +122,8 @@ def test_plan_with_optionals():
     def fn(a: Optional[str]):
         pass
 
-    assert andi.plan(fn, [type(None), str], [str]) == {str: {}}
+    assert andi.plan(fn, [type(None), str], [str]) == \
+           {str: {}, FunctionArguments: {'a': str}}
     plan = andi.plan(fn, [type(None)], [])
-    assert plan == {type(None): {}}
+    assert plan == {type(None): {}, FunctionArguments: {'a': type(None)}}
     assert andi.build(plan)[type(None)] == None

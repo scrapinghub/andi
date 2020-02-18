@@ -3,7 +3,7 @@ import typing
 from collections import OrderedDict
 from typing import (
     Any, Dict, List, Optional, Type, Callable, Union, Container,
-    get_type_hints)
+    get_type_hints, Tuple)
 
 from andi.typeutils import get_union_args, is_union, get_globalns, select_type
 from andi.utils import as_class_names
@@ -77,6 +77,12 @@ class CyclicDependencyError(TypeError):
     """ Raised on cyclic dependencies """
 
 
+class FunctionArguments:
+    """ Key marker to return the inspected function arguments into the
+    ``Plan`` returned by the ``plan`` function """
+    pass
+
+
 def plan(class_or_func: Union[Type, Callable],
          can_provide: TypeContainerOrCallable,
          externally_provided: TypeContainerOrCallable) -> Plan:
@@ -86,7 +92,11 @@ def plan(class_or_func: Union[Type, Callable],
     an ``OrderedDict`` containing the proper instantiation order
     for each type so that the dependencies existence is assured. The keys in
     this plan are the type, and the values are dicts where the keys are the
-    params names and the values  are the type required for this parameter.
+    params names and the values are the type required for this parameter.
+
+    If the input is a function then there will be a final entry in the plan with
+    the key ``FunctionArguments`` that contains the dictionary of the
+    fulfilled arguments for this function (could be incomplete).
 
     This function recursively checks for dependencies. If a cyclic dependency is
     found the error ``CyclicDependencyError`` is raised.
@@ -99,7 +109,10 @@ def plan(class_or_func: Union[Type, Callable],
                           If a method is given then this function will try
                           to create a plan to create all its arguments, but it
                           won't fail if all the required parameters cannot
-                          be fulfilled. A partial plan is returned instead.
+                          be fulfilled. The last entry in this case will be
+                          the arguments that could be fulfilled for the input
+                          function with its types and the key will be
+                          ``FunctionArguments``
     :param can_provide: A predicate or a dictionary that says if a class
                         is providable. Any required class found
                         by this function should be providable, otherwise,
@@ -111,7 +124,7 @@ def plan(class_or_func: Union[Type, Callable],
                         to deal with this case.
     :param externally_provided: A predicate or a dictionary that says if a class
                                 will be provided externally.
-                                This function won't try to resolve its
+                                The ``plan`` function won't try to resolve its
                                 dependencies, so it acts as a way to stop
                                 dependency injection for these classes where
                                 we don't want it because they will be provided by
@@ -132,7 +145,7 @@ def _plan(class_or_func: Union[Type, Callable],
           externally_provided: Callable[[Optional[Type]], bool],
           dependency_stack=None) -> Plan:
     dependency_stack = dependency_stack or []
-    tasks = OrderedDict()  # type: Plan
+    plan_seq = OrderedDict()  # type: Plan
     type_for_arg = {}
 
     input_is_type = isinstance(class_or_func, type)
@@ -144,8 +157,8 @@ def _plan(class_or_func: Union[Type, Callable],
                 "Type {} cannot be provided".format(as_class_names(cls)))
 
         if externally_provided(cls):
-            tasks[cls] = {}
-            return tasks
+            plan_seq[cls] = {}
+            return plan_seq
 
         if cls in dependency_stack:
             raise CyclicDependencyError(
@@ -159,9 +172,9 @@ def _plan(class_or_func: Union[Type, Callable],
     for argname, types in arguments.items():
         sel_cls = select_type(types, can_provide)
         if sel_cls is not None:
-            if sel_cls not in tasks:
-                tasks.update((_plan(sel_cls, can_provide, externally_provided,
-                                    dependency_stack)))
+            if sel_cls not in plan_seq:
+                plan_seq.update(_plan(sel_cls, can_provide, externally_provided,
+                                    dependency_stack))
             type_for_arg[argname] = sel_cls
         else:
             # Non fulfilling all deps is allowed for non type inputs.
@@ -171,9 +184,9 @@ def _plan(class_or_func: Union[Type, Callable],
                         as_class_names(class_or_func))
                 raise NonProvidableError(msg)
 
-    if input_is_type:
-        tasks[cls] = type_for_arg
-    return tasks
+
+    plan_seq[cls if input_is_type else FunctionArguments] = type_for_arg
+    return plan_seq
 
 
 def build(plan: Plan, stock: Optional[Dict[Type, Any]] = None):
@@ -183,6 +196,8 @@ def build(plan: Plan, stock: Optional[Dict[Type, Any]] = None):
     for cls, params in plan.items():
         if cls in stock:
             instances[cls] = stock[cls]
+        elif cls == FunctionArguments:
+            pass
         else:
             kwargs = {param: instances[pcls]
                       for param, pcls in params.items()}
