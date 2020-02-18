@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Optional
 
 import pytest
 
@@ -117,3 +117,9 @@ def test_plan_for_func():
     fn(**kwargs)
 
 
+def test_plan_with_optionals():
+    def fn(a: Optional[str]):
+        pass
+
+    assert andi.plan(fn, [type(None), str], [str]) == {str: {}}
+    assert andi.plan(fn, [type(None)], []) == {type(None): {}}

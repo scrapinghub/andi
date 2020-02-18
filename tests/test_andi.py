@@ -63,27 +63,27 @@ def test_optional():
     def func(x: Optional[Foo]):
         pass
 
-    assert andi.inspect(func) == {'x': [Foo, None]}
+    assert andi.inspect(func) == {'x': [Foo, type(None)]}
 
     assert andi.to_provide(func, {Foo, Bar}) == {'x': Foo}
-    assert andi.to_provide(func, {Foo, Bar, None}) == {'x': Foo}
+    assert andi.to_provide(func, {Foo, Bar, type(None)}) == {'x': Foo}
     assert andi.to_provide(func, {Bar}) == {}
-    assert andi.to_provide(func, {Bar, None}) == {'x': None}
+    assert andi.to_provide(func, {Bar, type(None)}) == {'x': type(None)}
 
 
 def test_optional_union():
     def func(x: Optional[Union[Foo, Baz]]):
         pass
 
-    assert andi.inspect(func) == {'x': [Foo, Baz, None]}
+    assert andi.inspect(func) == {'x': [Foo, Baz, type(None)]}
 
     assert andi.to_provide(func, {Foo, Bar}) == {'x': Foo}
-    assert andi.to_provide(func, {Baz, Foo, None}) == {'x': Foo}
+    assert andi.to_provide(func, {Baz, Foo, type(None)}) == {'x': Foo}
     assert andi.to_provide(func, {Baz}) == {'x': Baz}
     assert andi.to_provide(func, {Bar}) == {}
-    assert andi.to_provide(func, {Bar, None}) == {'x': None}
+    assert andi.to_provide(func, {Bar, type(None)}) == {'x': type(None)}
     assert andi.to_provide(func, {}) == {}
-    assert andi.to_provide(func, {None}) == {'x': None}
+    assert andi.to_provide(func, {type(None)}) == {'x': type(None)}
 
 
 def test_not_annotated():

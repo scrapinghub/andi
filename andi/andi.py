@@ -20,7 +20,7 @@ def inspect(func: Callable) -> Dict[str, List[Optional[Type]]]:
     res = {}
     for key, tp in annotations.items():
         if is_union(tp):
-            res[key] = get_union_args(tp)
+            res[key] = list(tp.__args__)
         else:
             res[key] = [tp]
     return res
@@ -159,7 +159,7 @@ def _plan(class_or_func: Union[Type, Callable],
 
     for argname, types in arguments.items():
         sel_cls = select_type(types, can_provide)
-        if sel_cls:
+        if sel_cls is not None:
             if sel_cls not in tasks:
                 tasks.update((_plan(sel_cls, can_provide, externally_provided,
                                     dependency_stack)))
