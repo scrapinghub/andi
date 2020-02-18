@@ -5,7 +5,7 @@ from typing import (
     Any, Dict, List, Optional, Type, Callable, Union, Container,
     get_type_hints)
 
-from andi.typeutils import get_union_args, is_union, get_globalns
+from andi.typeutils import get_union_args, is_union, get_globalns, select_type
 from andi.utils import as_class_names
 
 
@@ -20,7 +20,7 @@ def inspect(func: Callable) -> Dict[str, List[Optional[Type]]]:
     res = {}
     for key, tp in annotations.items():
         if is_union(tp):
-            res[key] = list(tp.__args__)
+            res[key] = get_union_args(tp)
         else:
             res[key] = [tp]
     return res
@@ -60,10 +60,9 @@ def to_provide(
 
     result = {}
     for argname, types in arguments.items():
-        for cls in types:
-            if can_provide(cls):
-                result[argname] = cls
-                break
+        sel_cls = select_type(types, can_provide)
+        if sel_cls:
+            result[argname] = sel_cls
     return result
 
 
@@ -175,15 +174,6 @@ def _plan(class_or_func: Union[Type, Callable],
     if input_is_type:
         tasks[cls] = type_for_arg
     return tasks
-
-
-def select_type(types, can_provide):
-    sel_cls = None
-    for candidate in types:
-        if can_provide(candidate):
-            sel_cls = candidate
-            break
-    return sel_cls
 
 
 def build(plan: Plan, stock: Optional[Dict[Type, Any]] = None):
