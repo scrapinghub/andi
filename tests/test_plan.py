@@ -122,4 +122,6 @@ def test_plan_with_optionals():
         pass
 
     assert andi.plan(fn, [type(None), str], [str]) == {str: {}}
-    assert andi.plan(fn, [type(None)], []) == {type(None): {}}
+    plan = andi.plan(fn, [type(None)], [])
+    assert plan == {type(None): {}}
+    assert andi.build(plan)[type(None)] == None
