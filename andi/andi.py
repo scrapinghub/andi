@@ -7,6 +7,7 @@ from typing import (
 
 from andi.typeutils import get_union_args, is_union, get_globalns, select_type
 from andi.utils import as_class_names
+from andi.errors import CyclicDependencyError, NonProvidableError
 
 
 def inspect(func: Callable) -> Dict[str, List[Optional[Type]]]:
@@ -67,14 +68,6 @@ def to_provide(
 
 
 Plan = typing.Dict[Type, Dict[str, Type]]
-
-
-class NonProvidableError(TypeError):
-    """ Raised when a type is not providable """
-
-
-class CyclicDependencyError(TypeError):
-    """ Raised on cyclic dependencies """
 
 
 class FunctionArguments:
