@@ -3,7 +3,7 @@ import typing
 from collections import OrderedDict
 from typing import (
     Any, Dict, List, Optional, Type, Callable, Union, Container,
-    get_type_hints, Tuple)
+    get_type_hints)
 
 from andi.typeutils import get_union_args, is_union, get_globalns
 from andi.utils import as_class_names
