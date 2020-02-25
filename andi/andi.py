@@ -61,7 +61,7 @@ def to_provide(
 
     result = {}
     for argname, types in arguments.items():
-        sel_cls = select_type(types, can_provide)
+        sel_cls = _select_type(types, can_provide)
         if sel_cls:
             result[argname] = sel_cls
     return result
@@ -163,7 +163,7 @@ def _plan(class_or_func: Union[Type, Callable],
         arguments = inspect(class_or_func)
 
     for argname, types in arguments.items():
-        sel_cls = select_type(types, can_provide)
+        sel_cls = _select_type(types, can_provide)
         if sel_cls is not None:
             if sel_cls not in plan_seq:
                 plan_seq.update(_plan(sel_cls, can_provide, externally_provided,
@@ -205,7 +205,7 @@ def plan_str(plan: Plan):
     return "\n".join(map(str, str_dict.items()))
 
 
-def select_type(types, can_provide):
+def _select_type(types, can_provide):
     """ Choose the first type that can be provided. None otherwise. """
     sel_cls = None
     for candidate in types:
