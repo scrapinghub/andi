@@ -5,7 +5,7 @@ from typing import (
     Any, Dict, List, Optional, Type, Callable, Union, Container,
     get_type_hints, Tuple)
 
-from andi.typeutils import get_union_args, is_union, get_globalns, select_type
+from andi.typeutils import get_union_args, is_union, get_globalns
 from andi.utils import as_class_names
 from andi.errors import CyclicDependencyError, NonProvidableError
 
@@ -203,3 +203,13 @@ def plan_str(plan: Plan):
     for cls, params in plan.items():
         str_dict[cls.__name__] = {p: c.__name__ for p, c in params.items()}
     return "\n".join(map(str, str_dict.items()))
+
+
+def select_type(types, can_provide):
+    """ Choose the first type that can be provided. None otherwise. """
+    sel_cls = None
+    for candidate in types:
+        if can_provide(candidate):
+            sel_cls = candidate
+            break
+    return sel_cls

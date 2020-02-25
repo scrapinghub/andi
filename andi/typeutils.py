@@ -23,16 +23,6 @@ def get_union_args(tp) -> List:
     return list(tp.__args__)
 
 
-def select_type(types, can_provide):
-    """ Choose the first type that can be provided. None otherwise. """
-    sel_cls = None
-    for candidate in types:
-        if can_provide(candidate):
-            sel_cls = candidate
-            break
-    return sel_cls
-
-
 def issubclass_safe(cls, bases) -> bool:
     """ like issubclass, but return False if cls is not a class, instead of
     raising an error:
