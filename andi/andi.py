@@ -29,7 +29,7 @@ def inspect(func: Callable) -> Dict[str, List[Optional[Type]]]:
 
 TypeContainerOrCallable = Union[
     Container[Type],
-    Callable[[Optional[Type]], bool]
+    Callable[[Type], bool]
 ]
 
 
@@ -134,8 +134,8 @@ def plan(class_or_func: Union[Type, Callable],
 
 
 def _plan(class_or_func: Union[Type, Callable],
-          can_provide: Callable[[Optional[Type]], bool],
-          externally_provided: Callable[[Optional[Type]], bool],
+          can_provide: Callable[[Type], bool],
+          externally_provided: Callable[[Type], bool],
           dependency_stack=None) -> Plan:
     dependency_stack = dependency_stack or []
     plan_seq = OrderedDict()  # type: Plan
