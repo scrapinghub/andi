@@ -88,9 +88,20 @@ class FunctionArguments:
     pass
 
 
-def plan(class_or_func: Union[Type, Callable],
-         can_provide: TypeContainerOrCallable,
-         externally_provided: TypeContainerOrCallable) -> Plan:
+def plan_for_class(cls: Type,
+                   can_provide: TypeContainerOrCallable,
+                   externally_provided: TypeContainerOrCallable
+                   ) -> Plan:
+    assert isinstance(cls, type)
+    can_provide, externally_provided = _ensure_plan_params_func(
+        can_provide, externally_provided)
+    return _plan(cls, can_provide, externally_provided, True, None)
+
+
+def plan_for_func(func: Callable,
+                  can_provide: TypeContainerOrCallable,
+                  externally_provided: TypeContainerOrCallable,
+                  strict=False) -> Plan:
     """ Check if it is possible to fulfill the arguments to invoke the input
     function (or to the create the input class if a class is given). If possible
     then a plan to build the requirements is returned. This plan is
@@ -136,16 +147,16 @@ def plan(class_or_func: Union[Type, Callable],
                                 other means.
     :return: The plan ready to be used as ``build`` method input.
     """
-    assert can_provide is not None
-    assert externally_provided is not None
-    can_provide = _ensure_can_provide_func(can_provide)
-    externally_provided = _ensure_can_provide_func(externally_provided)
-    return _plan(class_or_func, can_provide, externally_provided, None)
+    assert not isinstance(func, type)
+    can_provide, externally_provided = _ensure_plan_params_func(
+        can_provide, externally_provided)
+    return _plan(func, can_provide, externally_provided, strict, None)
 
 
 def _plan(class_or_func: Union[Type, Callable],
           can_provide: Callable[[Type], bool],
           externally_provided: Callable[[Type], bool],
+          strict,
           dependency_stack=None) -> Plan:
     dependency_stack = dependency_stack or []
     plan_seq = OrderedDict()  # type: Plan
@@ -177,11 +188,10 @@ def _plan(class_or_func: Union[Type, Callable],
         if sel_cls is not None:
             if sel_cls not in plan_seq:
                 plan_seq.update(_plan(sel_cls, can_provide, externally_provided,
-                                    dependency_stack))
+                                      True, dependency_stack))
             type_for_arg[argname] = sel_cls
         else:
-            # Non fulfilling all deps is allowed for non type inputs.
-            if input_is_type:
+            if input_is_type or strict:
                 if not types:
                     msg = "Parameter '{}' is lacking annotations in " \
                           "'{}.__init__()'. Not possible to build a plan".format(
@@ -236,3 +246,14 @@ def _ensure_can_provide_func(cont_or_call: TypeContainerOrCallable
     if isinstance(cont_or_call, Container):
         return cont_or_call.__contains__
     return cont_or_call
+
+
+def _ensure_plan_params_func(can_provide, externally_provided
+                             ) -> typing.Tuple[Callable[[Type], bool],
+                                               Callable[[Type], bool]]:
+    assert can_provide is not None
+    assert externally_provided is not None
+    can_provide = _ensure_can_provide_func(can_provide)
+    externally_provided = _ensure_can_provide_func(externally_provided)
+    return can_provide, externally_provided
+

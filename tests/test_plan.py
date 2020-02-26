@@ -38,7 +38,7 @@ ALL = [A, B, C, D, E]
 SOME = [A, B, C]
 
 def test_plan_and_build():
-    plan = andi.plan(E, lambda x: True, [A])
+    plan = andi.plan_for_class(E, lambda x: True, [A])
 
     assert set(list(plan.keys())[:2]) == {A, B}
     assert list(plan.values())[:2] == [{}, {}]
@@ -52,9 +52,9 @@ def test_plan_and_build():
 
 
 def test_cyclic_dependency():
-    andi.plan(E, lambda x: True, [A])  # No error if externally provided
+    andi.plan_for_class(E, lambda x: True, [A])  # No error if externally provided
     with pytest.raises(andi.CyclicDependencyError):
-        andi.plan(E, lambda x: True, [])
+        andi.plan_for_class(E, lambda x: True, [])
 
 
 @pytest.mark.parametrize("cls,can_provide,externally_provided", [
@@ -63,9 +63,9 @@ def test_cyclic_dependency():
     (E, ALL, ALL)
 ])
 def test_plan_container_or_func(cls, can_provide, externally_provided):
-    plan_func = andi.plan(cls, can_provide.__contains__,
+    plan_func = andi.plan_for_class(cls, can_provide.__contains__,
                           externally_provided.__contains__)
-    plan_container = andi.plan(cls, can_provide, externally_provided)
+    plan_container = andi.plan_for_class(cls, can_provide, externally_provided)
     assert plan_func == plan_container
 
 
@@ -75,38 +75,38 @@ def test_cannot_be_provided():
         def __init__(self, b: B):
             pass
 
-    plan = list(andi.plan(WithB, [WithB, B], [B]).items())
+    plan = list(andi.plan_for_class(WithB, [WithB, B], [B]).items())
     assert plan == [(B, {}), (WithB, {"b": B})]
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(WithB, [WithB], [])
+        andi.plan_for_class(WithB, [WithB], [])
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(WithB, [], [])
+        andi.plan_for_class(WithB, [], [])
 
     class WithOptionals:
 
         def __init__(self, a_or_b: Union[A, B]):
             pass
 
-    plan = list(andi.plan(WithOptionals, [WithOptionals, A, B], [A]).items())
+    plan = list(andi.plan_for_class(WithOptionals, [WithOptionals, A, B], [A]).items())
     assert plan == [(A, {}), (WithOptionals, {'a_or_b': A})]
 
-    plan = list(andi.plan(WithOptionals, [WithOptionals, B], [A]).items())
+    plan = list(andi.plan_for_class(WithOptionals, [WithOptionals, B], [A]).items())
     assert plan == [(B, {}), (WithOptionals, {'a_or_b': B})]
 
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(WithOptionals, [WithOptionals], [A]).items()
+        andi.plan_for_class(WithOptionals, [WithOptionals], [A]).items()
 
 
 def test_externally_provided():
-    plan = andi.plan(E, ALL, ALL)
+    plan = andi.plan_for_class(E, ALL, ALL)
     assert plan == {E: {}}
 
-    plan = andi.plan(E, ALL, [A, B, C, D])
+    plan = andi.plan_for_class(E, ALL, [A, B, C, D])
     assert plan.keys() == {B, C, D, E}
     assert list(plan.keys())[-1] == E
     assert plan[E] == {'b': B, 'c': C, 'd': D}
 
-    plan = andi.plan(E, ALL, [A, B, D])
+    plan = andi.plan_for_class(E, ALL, [A, B, D])
     seq = list(plan.keys())
     assert seq.index(A) < seq.index(C)
     assert seq.index(B) < seq.index(C)
@@ -124,7 +124,7 @@ def test_plan_for_func():
         assert type(e) == E
         assert type(c) == C
 
-    plan = andi.plan(fn, ALL, [A])
+    plan = andi.plan_for_func(fn, ALL, [A])
     assert list(plan.items())[-1] == (FunctionArguments, {'e': E, 'c': C})
     instances = andi.build(plan, {A: ""})
     kwargs = dict(other="yeah!", e=instances[E], c=instances[C])
@@ -135,9 +135,9 @@ def test_plan_with_optionals():
     def fn(a: Optional[str]):
         pass
 
-    assert andi.plan(fn, [type(None), str], [str]) == \
+    assert andi.plan_for_func(fn, [type(None), str], [str]) == \
            {str: {}, FunctionArguments: {'a': str}}
-    plan = andi.plan(fn, [type(None)], [])
+    plan = andi.plan_for_func(fn, [type(None)], [])
     assert plan == {type(None): {}, FunctionArguments: {'a': type(None)}}
     assert andi.build(plan)[type(None)] == None
 
@@ -149,8 +149,8 @@ def test_plan_class_non_annotated():
                      non_ann_kw, non_ann_kw_def=1):
             pass
 
-    plan = andi.plan(WithNonAnnArgs.__init__, ALL + [WithNonAnnArgs], [A])
+    plan = andi.plan_for_func(WithNonAnnArgs.__init__, ALL + [WithNonAnnArgs], [A])
     assert plan == {A: {}, B: {}, FunctionArguments: {'a': A, 'b': B}}
 
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(WithNonAnnArgs, ALL + [WithNonAnnArgs], [A])
+        andi.plan_for_class(WithNonAnnArgs, ALL + [WithNonAnnArgs], [A])
