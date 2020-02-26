@@ -140,3 +140,17 @@ def test_plan_with_optionals():
     plan = andi.plan(fn, [type(None)], [])
     assert plan == {type(None): {}, FunctionArguments: {'a': type(None)}}
     assert andi.build(plan)[type(None)] == None
+
+
+def test_plan_class_non_annotated():
+    class WithNonAnnArgs:
+
+        def __init__(self, a: A, b: B, non_ann, non_ann_def=0, *,
+                     non_ann_kw, non_ann_kw_def=1):
+            pass
+
+    plan = andi.plan(WithNonAnnArgs.__init__, ALL + [WithNonAnnArgs], [A])
+    assert plan == {A: {}, B: {}, FunctionArguments: {'a': A, 'b': B}}
+
+    with pytest.raises(andi.NonProvidableError):
+        andi.plan(WithNonAnnArgs, ALL + [WithNonAnnArgs], [A])

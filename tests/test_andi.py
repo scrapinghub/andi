@@ -90,7 +90,7 @@ def test_not_annotated():
     def func(x):
         pass
 
-    assert andi.inspect(func) == {}
+    assert andi.inspect(func) == {'x': []}
 
 
 def test_string_types():
@@ -113,7 +113,6 @@ def test_string_types_with_fn():
 
     with pytest.raises(NameError):
         andi.inspect(Fuu.__init__)
-
 
 
 def test_init_methods():

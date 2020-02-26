@@ -8,23 +8,36 @@ from typing import (
 from andi.typeutils import get_union_args, is_union, get_globalns
 from andi.utils import as_class_names
 from andi.errors import CyclicDependencyError, NonProvidableError
+from inspect import signature, Parameter
 
 
 def inspect(func: Callable) -> Dict[str, List[Optional[Type]]]:
     """
     For each argument of the ``func`` return a list of possible types.
+    Non annotated arguments are also returned with an empty list of possible
+    types.
     """
     globalns = get_globalns(func)
     annotations = get_type_hints(func, globalns)
+    _include_non_annotated_parameters(func, annotations)
     annotations.pop('return', None)
-    annotations.pop('cls', None)  # FIXME: pop first argument of methods
+    annotations.pop('self', None)  # FIXME: pop first argument of methods
+    annotations.pop('cls', None)
     res = {}
     for key, tp in annotations.items():
         if is_union(tp):
             res[key] = get_union_args(tp)
         else:
-            res[key] = [tp]
+            res[key] = [] if tp is None else [tp]
     return res
+
+
+def _include_non_annotated_parameters(func, annotations):
+    for name, param in signature(func).parameters.items():
+        if (name not in annotations and
+                param.kind not in {Parameter.VAR_POSITIONAL,
+                                   Parameter.VAR_KEYWORD}):
+            annotations[name] = None
 
 
 TypeContainerOrCallable = Union[
@@ -169,8 +182,14 @@ def _plan(class_or_func: Union[Type, Callable],
         else:
             # Non fulfilling all deps is allowed for non type inputs.
             if input_is_type:
-                msg = "Any of {} types are required ".format(as_class_names(types))
-                msg += " in {} __init__ but none can be provided".format(
+                if not types:
+                    msg = "Parameter '{}' is lacking annotations in " \
+                          "'{}.__init__()'. Not possible to build a plan".format(
+                        argname, as_class_names(class_or_func))
+                else:
+                    msg = "Any of {} types are required ".format(as_class_names(types))
+                    msg += " for parameter '{}' ".format(argname)
+                    msg += " in '{}.__init__()' but none can be provided".format(
                         as_class_names(class_or_func))
                 raise NonProvidableError(msg)
 
