@@ -7,22 +7,31 @@ from andi import plan_str, FunctionArguments
 
 
 class A:
-    def __init__(self, e: 'E'): pass
+
+    def __init__(self, e: 'E'):
+        pass
 
 
-class B: pass
+class B:
+    pass
 
 
 class C:
-    def __init__(self, a: A, b: B): pass
+
+    def __init__(self, a: A, b: B):
+        pass
 
 
 class D:
-    def __init__(self, a: A, c: C): pass
+
+    def __init__(self, a: A, c: C):
+        pass
 
 
 class E:
-    def __init__(self, b: B, c: C, d: D): pass
+
+    def __init__(self, b: B, c: C, d: D):
+        pass
 
 
 ALL = [A, B, C, D, E]
