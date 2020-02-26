@@ -71,7 +71,9 @@ def test_plan_container_or_func(cls, can_provide, externally_provided):
 
 def test_cannot_be_provided():
     class WithB:
-        def __init__(self, b: B): pass
+
+        def __init__(self, b: B):
+            pass
 
     plan = list(andi.plan(WithB, [WithB, B], [B]).items())
     assert plan == [(B, {}), (WithB, {"b": B})]
@@ -81,7 +83,9 @@ def test_cannot_be_provided():
         andi.plan(WithB, [], [])
 
     class WithOptionals:
-        def __init__(self, a_or_b: Union[A, B]): pass
+
+        def __init__(self, a_or_b: Union[A, B]):
+            pass
 
     plan = list(andi.plan(WithOptionals, [WithOptionals, A, B], [A]).items())
     assert plan == [(A, {}), (WithOptionals, {'a_or_b': A})]
