@@ -56,8 +56,7 @@ def to_provide(
     else:
         arguments = arguments_or_func
 
-    if isinstance(can_provide, Container):
-        can_provide = can_provide.__contains__
+    can_provide = _ensure_can_provide_func(can_provide)
 
     result = {}
     for argname, types in arguments.items():
@@ -126,10 +125,8 @@ def plan(class_or_func: Union[Type, Callable],
     """
     assert can_provide is not None
     assert externally_provided is not None
-    if isinstance(can_provide, Container):
-        can_provide = can_provide.__contains__
-    if isinstance(externally_provided, Container):
-        externally_provided = externally_provided.__contains__
+    can_provide = _ensure_can_provide_func(can_provide)
+    externally_provided = _ensure_can_provide_func(externally_provided)
     return _plan(class_or_func, can_provide, externally_provided, None)
 
 
@@ -213,3 +210,10 @@ def _select_type(types, can_provide):
             sel_cls = candidate
             break
     return sel_cls
+
+
+def _ensure_can_provide_func(cont_or_call: TypeContainerOrCallable
+                             ) -> Callable[[Type], bool]:
+    if isinstance(cont_or_call, Container):
+        return cont_or_call.__contains__
+    return cont_or_call
