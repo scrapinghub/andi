@@ -3,7 +3,7 @@ from typing import Union, Optional
 import pytest
 
 import andi
-from andi import plan_str, FunctionArguments
+from andi import plan_str, NonProvidableError, FunctionArguments
 
 
 class A:
@@ -124,22 +124,29 @@ def test_plan_for_func():
         assert type(e) == E
         assert type(c) == C
 
-    plan = andi.plan_for_func(fn, ALL, [A])
-    assert list(plan.items())[-1] == (FunctionArguments, {'e': E, 'c': C})
+    plan, fulfilled_args = andi.plan_for_func(fn, ALL, [A])
+    assert fulfilled_args == {'e': E, 'c': C}
     instances = andi.build(plan, {A: ""})
-    kwargs = dict(other="yeah!", e=instances[E], c=instances[C])
+    kwargs = dict(other="yeah!",
+                  **{arg: instances[tp] for arg, tp in fulfilled_args.items()})
     fn(**kwargs)
+
+    with pytest.raises(NonProvidableError):
+        andi.plan_for_func(fn, ALL, [A], strict=True)
 
 
 def test_plan_with_optionals():
     def fn(a: Optional[str]):
-        pass
+        assert a is None
 
     assert andi.plan_for_func(fn, [type(None), str], [str]) == \
-           {str: {}, FunctionArguments: {'a': str}}
-    plan = andi.plan_for_func(fn, [type(None)], [])
-    assert plan == {type(None): {}, FunctionArguments: {'a': type(None)}}
-    assert andi.build(plan)[type(None)] == None
+           ({str: {}}, {'a': str})
+    plan, fulfilled_args = andi.plan_for_func(fn, [type(None)], [])
+    assert plan == {type(None): {}}
+    assert fulfilled_args == {'a': type(None)}
+    instances = andi.build(plan)
+    assert instances[type(None)] is None
+    fn(**{arg: instances[tp] for arg, tp in fulfilled_args.items()})
 
 
 def test_plan_class_non_annotated():
@@ -149,8 +156,22 @@ def test_plan_class_non_annotated():
                      non_ann_kw, non_ann_kw_def=1):
             pass
 
-    plan = andi.plan_for_func(WithNonAnnArgs.__init__, ALL + [WithNonAnnArgs], [A])
-    assert plan == {A: {}, B: {}, FunctionArguments: {'a': A, 'b': B}}
+    plan, fulfilled_args = andi.plan_for_func(
+        WithNonAnnArgs.__init__, ALL + [WithNonAnnArgs], [A])
+    assert plan == {A: {}, B: {}}
+    assert fulfilled_args == {'a': A, 'b': B}
 
     with pytest.raises(andi.NonProvidableError):
         andi.plan_for_class(WithNonAnnArgs, ALL + [WithNonAnnArgs], [A])
+
+
+@pytest.mark.parametrize("strict", [(True), (False)])
+def test_plan_no_args(strict):
+    def fn():
+        return True
+
+    plan, fulfilled_args = andi.plan_for_func(fn, [], [], strict)
+    assert plan == {}
+    assert fulfilled_args == {}
+    instances = andi.build(plan)
+    assert fn(**{arg: instances[tp] for arg, tp in fulfilled_args.items()})

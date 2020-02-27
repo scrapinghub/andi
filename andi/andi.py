@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-import typing
 from collections import OrderedDict
 from typing import (
     Any, Dict, List, Optional, Type, Callable, Union, Container,
-    get_type_hints)
+    get_type_hints, Tuple, cast)
 
 from andi.typeutils import get_union_args, is_union, get_globalns
 from andi.utils import as_class_names
@@ -79,7 +78,7 @@ def to_provide(
     return result
 
 
-Plan = typing.Dict[Type, Dict[str, Type]]
+Plan = Dict[Type, Dict[str, Type]]
 
 
 class FunctionArguments:
@@ -92,8 +91,15 @@ def plan_for_class(cls: Type,
                    can_provide: TypeContainerOrCallable,
                    externally_provided: TypeContainerOrCallable
                    ) -> Plan:
+    """
+
+    :param cls:
+    :param can_provide:
+    :param externally_provided:
+    :return:
+    """
     assert isinstance(cls, type)
-    can_provide, externally_provided = _ensure_plan_params_func(
+    can_provide, externally_provided = _ensure_input_type_checks_as_func(
         can_provide, externally_provided)
     return _plan(cls, can_provide, externally_provided, True, None)
 
@@ -101,8 +107,8 @@ def plan_for_class(cls: Type,
 def plan_for_func(func: Callable,
                   can_provide: TypeContainerOrCallable,
                   externally_provided: TypeContainerOrCallable,
-                  strict=False) -> Plan:
-    """ Check if it is possible to fulfill the arguments to invoke the input
+                  strict=False) -> Tuple[Plan, Dict[str, Type]]:
+    """ Check if it is possible to fulfill the arguments to invoke the inputS
     function (or to the create the input class if a class is given). If possible
     then a plan to build the requirements is returned. This plan is
     an ``OrderedDict`` containing the proper instantiation order
@@ -116,6 +122,30 @@ def plan_for_func(func: Callable,
 
     This function recursively checks for dependencies. If a cyclic dependency is
     found the error ``CyclicDependencyError`` is raised.
+
+    >>> class A:
+    ...     value = 'a'
+    ...
+    >>> class B:
+    ...     def __init__(self, a: A):
+    ...         self.value = 'b'
+    ...
+    >>> def fn(a: A, b: B, non_annotated):
+    ...     return 'Called with {}, {}, {}'.format(a.value, b.value, non_annotated)
+    ...
+    >>> def build(plan):  # Build all the instances from a plan
+    ...     instances = {}
+    ...     for tp, args in plan.items():
+    ...         instances[tp] = tp(**{arg: instances[arg_tp]
+    ...                               for arg, arg_tp in args.items()})
+    ...     return instances
+    ...
+    >>> plan, fulfilled_args = plan_for_func(fn, [A, B], [])
+    >>> instances = build(plan)
+    >>> fn(**dict(non_annotated='non_annotated',
+    ...         **{arg: instances[tp] for arg, tp in fulfilled_args.items()}))
+    'Called with a, b, non_annotated'
+
 
     :param class_or_func: If a class is provided this function will create
                           a plan to fulfil its ``__init__`` method. The class
@@ -148,9 +178,11 @@ def plan_for_func(func: Callable,
     :return: The plan ready to be used as ``build`` method input.
     """
     assert not isinstance(func, type)
-    can_provide, externally_provided = _ensure_plan_params_func(
+    can_provide, externally_provided = _ensure_input_type_checks_as_func(
         can_provide, externally_provided)
-    return _plan(func, can_provide, externally_provided, strict, None)
+    plan = _plan(func, can_provide, externally_provided, strict, None)
+    fulfilled_arguments = plan.pop(FunctionArguments)
+    return plan, fulfilled_arguments
 
 
 def _plan(class_or_func: Union[Type, Callable],
@@ -165,7 +197,7 @@ def _plan(class_or_func: Union[Type, Callable],
     input_is_type = isinstance(class_or_func, type)
 
     if input_is_type:
-        cls = typing.cast(Type, class_or_func)
+        cls = cast(Type, class_or_func)
         if not can_provide(cls):
             raise NonProvidableError(
                 "Type {} cannot be provided".format(as_class_names(cls)))
@@ -248,8 +280,8 @@ def _ensure_can_provide_func(cont_or_call: TypeContainerOrCallable
     return cont_or_call
 
 
-def _ensure_plan_params_func(can_provide, externally_provided
-                             ) -> typing.Tuple[Callable[[Type], bool],
+def _ensure_input_type_checks_as_func(can_provide, externally_provided
+                                      ) -> Tuple[Callable[[Type], bool],
                                                Callable[[Type], bool]]:
     assert can_provide is not None
     assert externally_provided is not None
