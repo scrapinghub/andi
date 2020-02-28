@@ -50,8 +50,10 @@ def to_provide(
             Callable,
             Dict[str, List[Optional[Type]]]
         ],
-        is_injectable: TypeContainerOrCallable
+        is_injectable: TypeContainerOrCallable,
+        bindings: Optional[Callable[[Type], Optional[Type]]] = None,
         ) -> Dict[str, Optional[Type]]:
+
     """
     Return a dictionary ``{argument_name: type}`` with types which should
     be provided.
@@ -70,10 +72,12 @@ def to_provide(
 
     is_injectable, externally_provided = _ensure_input_type_checks_as_func(
         is_injectable, [])
+    bindings = bindings or (lambda x: None)
 
     result = {}
     for argname, types in arguments.items():
-        sel_cls = _select_type(types, is_injectable, externally_provided)
+        sel_cls = _select_type(types, is_injectable, externally_provided,
+                               bindings)
         if sel_cls:
             result[argname] = sel_cls
     return result
@@ -85,6 +89,7 @@ Plan = Dict[Type, Dict[str, Type]]
 def plan_for_func(func: Callable, *,
                   is_injectable: TypeContainerOrCallable,
                   externally_provided: Optional[TypeContainerOrCallable] = None,
+                  bindings: Optional[Callable[[Type], Optional[Type]]] = None,
                   strict=False) -> Tuple[Plan, Dict[str, Type]]:
     """ Plan the sequence of instantiation tasks required to fulfill the
     the arguments of the given function (dependency injection).
@@ -138,7 +143,15 @@ def plan_for_func(func: Callable, *,
     has its own dependencies. If the planner fails to fulfill any of this
     dependencies a ``NonProvidableError`` will be raised.
 
-    See a full example in the following doctest:
+    ``bindings`` can be useful to bind particular implementations to some
+    types. For example you could provide ``{DatabaseConn: MySQLConn}.get``
+    in ``bindings`` argument to make a plan that replaces any dependency of
+    type ``DatabaseConn in the tree by the type ``MySQLConn``. Note that the
+    planner will deal with the required dependencies (e.g. MySQLConn could be
+    dependant on an argument of type ``DBCredentials``, so the planner with
+    update the plan accordingly).
+
+    Following you see an example:
 
     >>> class A:
     ...     value = 'a'
@@ -180,6 +193,12 @@ def plan_for_func(func: Callable, *,
                                 dependency injection for these classes where
                                 we don't want it because they will be provided by
                                 other means.
+    :param bindings: function that can translate one dependency from one type
+                     to another. The translation is done before the planing
+                     resolution so that the new arising dependencies after
+                     the translation can be resolved. Useful for offering
+                     customized implementations for some dependencies of the
+                     tree.
     :return: A tuple where the first element is the plan and the second is
              a dictionary with the arguments that finally it was possible to
              generate a plan for.
@@ -187,14 +206,16 @@ def plan_for_func(func: Callable, *,
     assert not isinstance(func, type)
     is_injectable, externally_provided = _ensure_input_type_checks_as_func(
         is_injectable, externally_provided)
-    plan = _plan(func, is_injectable, externally_provided, strict, None)
+    bindings = bindings or (lambda x: None)
+    plan = _plan(func, is_injectable, externally_provided, bindings, strict, None)
     fulfilled_arguments = plan.pop(FunctionArguments)
     return plan, fulfilled_arguments
 
 
 def plan_for_class(cls: Type, *,
                    is_injectable: TypeContainerOrCallable,
-                   externally_provided: Optional[TypeContainerOrCallable] = None
+                   externally_provided: Optional[TypeContainerOrCallable] = None,
+                   bindings: Optional[Callable[[Type], Optional[Type]]] = None
                    ) -> Plan:
     """ Plan the sequence of instantiation tasks required to create an instance
     of the given cls.
@@ -239,12 +260,16 @@ def plan_for_class(cls: Type, *,
     assert isinstance(cls, type)
     is_injectable, externally_provided = _ensure_input_type_checks_as_func(
         is_injectable, externally_provided)
-    return _plan(cls, is_injectable, externally_provided, True, None)
+    bindings = bindings or (lambda x: None)
+    # This covers applying bindings to input class itself
+    cls = bindings(cls) or cls
+    return _plan(cls, is_injectable, externally_provided, bindings, True, None)
 
 
 def _plan(class_or_func: Union[Type, Callable],
           is_injectable: Callable[[Type], bool],
           externally_provided: Callable[[Type], bool],
+          bindings: Callable[[Type], Optional[Type]],
           strict,
           dependency_stack=None) -> Plan:
     dependency_stack = dependency_stack or []
@@ -274,11 +299,11 @@ def _plan(class_or_func: Union[Type, Callable],
         arguments = inspect(class_or_func)
 
     for argname, types in arguments.items():
-        sel_cls = _select_type(types, is_injectable, externally_provided)
+        sel_cls = _select_type(types, is_injectable, externally_provided, bindings)
         if sel_cls is not None:
             if sel_cls not in plan_seq:
                 plan_seq.update(_plan(sel_cls, is_injectable, externally_provided,
-                                      True, dependency_stack))
+                                      bindings, True, dependency_stack))
             type_for_arg[argname] = sel_cls
         else:
             if input_is_type or strict:
@@ -298,10 +323,11 @@ def _plan(class_or_func: Union[Type, Callable],
     return plan_seq
 
 
-def _select_type(types, is_injectable, externally_provided):
+def _select_type(types, is_injectable, externally_provided, bindings):
     """ Choose the first type that can be provided. None otherwise. """
     sel_cls = None
     for candidate in types:
+        candidate = bindings(candidate) or candidate
         if is_injectable(candidate) or externally_provided(candidate):
             sel_cls = candidate
             break

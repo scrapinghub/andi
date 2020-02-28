@@ -4,7 +4,7 @@ import pytest
 
 import andi
 from tests.utils import build
-from andi import NonProvidableError
+from andi import NonProvidableError, CyclicDependencyError
 
 
 class A:
@@ -210,3 +210,17 @@ def test_plan_no_args(strict):
     assert fulfilled_args == {}
     instances = build(plan)
     assert fn(**{arg: instances[tp] for arg, tp in fulfilled_args.items()})
+
+
+def test_plan_bindings():
+    plan = andi.plan_for_class(A, is_injectable=ALL, bindings={A: B}.get)
+    assert plan == {B: {}}
+    plan = andi.plan_for_class(C, is_injectable=ALL, bindings={A: B}.get)
+    assert plan == {B: {}, C: {'a': B, 'b': B}}
+    plan = andi.plan_for_class(C, is_injectable=ALL, externally_provided=[A],
+                               bindings={A: B, B: A}.get)
+    assert plan == {B: {}, A: {}, C: {'a': B, 'b': A}}
+    with pytest.raises(CyclicDependencyError):
+        andi.plan_for_class(C, is_injectable=ALL, bindings={A: C}.get)
+    with pytest.raises(NonProvidableError):
+        andi.plan_for_class(C, is_injectable=ALL, bindings={A: str}.get)
