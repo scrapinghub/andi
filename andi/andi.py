@@ -92,22 +92,21 @@ def plan_for_func(func: Callable, *,
     The plan is a sequence encoded in a ``OrderedDict``. Each task in the plan
     contains:
 
-    * A key, with the type that must be built in this task
-    * The value, with all the arguments required to invoke the key constructor
-    method and its corresponding type encoded in a dictionary where the key is
-    the name of the argument and the value is its type.
+    * A key, with the class that must be built in this task
+    * The value, which a dictionary with all the kwargs required for the
+      key ``__init__`` method. This dictionary has argument names as keys
+      and classes (types) as values.
 
     The best way to understand a plan is to see how a typical building
-    function would use it to build the instances:
+    function would use it to build the instances::
 
-    ```
-    def build(plan):  # Build all the instances from a plan
-        instances = {}
-        for tp, args in plan.items():
-            instances[tp] = tp(**{arg: instances[arg_tp]
-                                  for arg, arg_tp in args.items()})
-        return instances
-    ```
+        def build(plan):  # Build all the instances from a plan
+            instances = {}
+            for cls, args in plan.items():
+                kwargs = {arg: instances[arg_cls]
+                          for arg, arg_cls in args.items()}
+                instances[cls] = cls(**kwargs)
+            return instances
 
     Note that the generated instances dictionary would contain not only the
     dependencies for the function given as argument, but also all the
@@ -116,27 +115,29 @@ def plan_for_func(func: Callable, *,
 
     This function returns a second dictionary (argument_name -> type) with
     the input function arguments for which it was possible to create a plan.
-    This way the function could be invoked with the following code:
+    This way the function could be invoked with the following code::
 
-    ```
-    plan, fulfilled_args = plan_for_func(func, ...)
-    instances = build(plan)
-    func(dict(other_arg='value',  # An argument that is out of the scope of dependency injection
-              **{arg: instances[arg_tp]
-                 for arg, arg_tp in fulfilled_args.items()}))
-    ```
+        plan, fulfilled_args = plan_for_func(func, ...)
+        instances = build(plan)
+        kwargs = {arg: instances[arg_cls]
+                  for arg, arg_cls in fulfilled_args.items()}
+        func(
+            other_arg='value, # argument that is out of the scope of dependency injection
+            **kwargs,
+        )
 
     If the argument ``strict`` is True then this function will fail
     with ``NonProvidableError`` if not all the required arguments
-    for the input function can be resolved. When ``strict`` is False, this function
-    provides only the plan for those arguments that could be resolved.
+    for the input function can be resolved. When ``strict`` is False, this
+    function provides the plan only for those arguments that could be resolved.
 
-    This function recursively checks for dependencies. If a cyclic dependency is
-    found the error ``CyclicDependencyError`` is raised.
+    This function recursively checks for dependencies. If a cyclic dependency
+    is found, ``CyclicDependencyError`` is raised.
 
     Any type found in the dependency tree that is injectable can as well
     has its own dependencies. If the planner fails to fulfill any of this
-    dependencies a ``NonProvidableError`` will be raised.
+    dependencies, ``NonProvidableError`` is raised, regardless of a value
+    of ``strict`` argument (even if strict=False).
 
     See a full example in the following doctest:
 
@@ -154,35 +155,39 @@ def plan_for_func(func: Callable, *,
     ...
     >>> def build(plan):  # Build all the instances from a plan
     ...     instances = {}
-    ...     for tp, args in plan.items():
-    ...         instances[tp] = tp(**{arg: instances[arg_tp]
-    ...                               for arg, arg_tp in args.items()})
+    ...     for cls, args in plan.items():
+    ...         kwargs = {arg: instances[arg_cls]
+    ...                   for arg, arg_cls in args.items()}
+    ...         instances[cls] = cls(**kwargs)
     ...     return instances
     ...
     >>> plan, fulfilled_args = plan_for_func(fn, is_injectable=[A, B])
     >>> instances = build(plan)
-    >>> fn(**dict(non_annotated='non_annotated',
-    ...         **{arg: instances[tp] for arg, tp in fulfilled_args.items()}))
+    >>> kwargs = {arg: instances[arg_cls] for arg, arg_cls in fulfilled_args.items()}
+    >>> fn(non_annotated='non_annotated', **kwargs)
     'Called with a, b, non_annotated'
 
 
     :param func: Function to be inspected.
-    :param is_injectable: A predicate or a dictionary that says if a type
-                        is injectable. The planer is responsible to deal
-                        with all types that are injectable when traversing
-                        the dependency graph. It will fail with
-                        ``NonProvidableError`` if it is not possible to generate
-                        a plan for any injectable type found.
-    :param externally_provided: A predicate or a dictionary that says if a class
-                                will be provided externally.
-                                The planner won't try to resolve its
-                                dependencies, so it acts as a way to stop
-                                dependency injection for these classes where
-                                we don't want it because they will be provided by
-                                other means.
+    :param is_injectable: A predicate or a container that says if a type
+        is injectable. The planer is responsible to deal
+        with all types that are injectable when traversing
+        the dependency graph. It fails with
+        ``NonProvidableError`` if it is not possible to generate
+        a plan for any of the injectable type found.
+    :param externally_provided: A predicate or a dictionary that says if
+        a class will be provided externally. The planner won't try to resolve
+        its dependencies, so it acts as a way to stop dependency injection
+        for these classes where we don't want it because they will be
+        provided by other means.
+    :param strict: If the argument ``strict`` is True then this function fails
+        with ``NonProvidableError`` if not all the required arguments
+        for the input function can be resolved. When ``strict`` is False, this
+        function provides the plan only for those arguments that could
+        be resolved.
     :return: A tuple where the first element is the plan and the second is
-             a dictionary with the arguments that finally it was possible to
-             generate a plan for.
+        a dictionary with the arguments that finally it was possible to
+        generate a plan for.
     """
     assert not isinstance(func, type)
     is_injectable, externally_provided = _ensure_input_type_checks_as_func(
@@ -201,12 +206,12 @@ def plan_for_class(cls: Type, *,
 
     Equivalent to function ``plan_for_func`` but for a class.
 
-    Note that is function will raise ``NonProvidableError`` if is not
+    Note that is function raises ``NonProvidableError`` if is not
     possible to create a plan for building the given class.
 
     See function ``plan_for_func`` for a explanation of the rest of arguments.
 
-    The following doctest example show how this method can be used to create
+    The following doctest example shows how this function can be used to create
     instances of the class ``C``:
 
     >>> class A:
@@ -223,15 +228,16 @@ def plan_for_class(cls: Type, *,
     ...
     >>> def build(plan):  # Build all the instances from a plan
     ...     instances = {}
-    ...     for tp, args in plan.items():
-    ...         instances[tp] = tp(**{arg: instances[arg_tp]
-    ...                               for arg, arg_tp in args.items()})
+    ...     for cls, args in plan.items():
+    ...         kwargs = {arg: instances[arg_cls]
+    ...                   for arg, arg_cls in args.items()}
+    ...         instances[cls] = cls(**kwargs)
     ...     return instances
     ...
-    >>> plan = plan_for_class(C, is_injectable=[A, B, C])
+    >>> plan = plan_for_class(C, is_injectable={A, B, C})
     >>> instances = build(plan)
-    >>> c = instances[C]  # The instance of C class with all deps resolved
-    >>> assert type(c) == C
+    >>> c = instances[C]  # Instance of C class with all dependencies resolved
+    >>> assert type(c) is C
     >>> assert c.a is instances[A]
     >>> assert c.b is instances[B]
     >>> assert c.b.a is instances[A]

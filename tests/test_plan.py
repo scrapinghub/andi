@@ -4,7 +4,6 @@ import pytest
 
 import andi
 from tests.utils import build
-from andi import NonProvidableError
 
 
 class A:
@@ -41,7 +40,7 @@ SOME = [A, B, C]
 
 def test_plan_and_build():
     plan = andi.plan_for_class(E, is_injectable=lambda x: True,
-                               externally_provided=[A])
+                               externally_provided={A})
 
     assert set(list(plan.keys())[:2]) == {A, B}
     assert list(plan.values())[:2] == [{}, {}]
@@ -56,7 +55,7 @@ def test_plan_and_build():
 
 def test_cyclic_dependency():
     andi.plan_for_class(E, is_injectable=lambda x: True,
-                        externally_provided=[A])  # No error if externally provided
+                        externally_provided={A})  # No error if externally provided
     with pytest.raises(andi.CyclicDependencyError):
         andi.plan_for_class(E, is_injectable=lambda x: True,
                             externally_provided=[])
@@ -81,8 +80,8 @@ def test_cannot_be_provided():
         def __init__(self, b: B):
             pass
 
-    plan = list(andi.plan_for_class(WithB, is_injectable=[WithB, B],
-                                    externally_provided=[B]).items())
+    plan = list(andi.plan_for_class(WithB, is_injectable={WithB, B},
+                                    externally_provided={B}).items())
     assert plan == [(B, {}), (WithB, {"b": B})]
     with pytest.raises(andi.NonProvidableError):
         andi.plan_for_class(WithB, is_injectable=[WithB])
@@ -95,17 +94,17 @@ def test_cannot_be_provided():
             pass
 
     plan = list(andi.plan_for_class(WithOptionals,
-                                    is_injectable=[WithOptionals, A, B],
-                                    externally_provided=[A]).items())
+                                    is_injectable={WithOptionals, A, B},
+                                    externally_provided={A}).items())
     assert plan == [(A, {}), (WithOptionals, {'a_or_b': A})]
 
     plan = list(andi.plan_for_class(WithOptionals,
-                                    is_injectable=[WithOptionals, B],
-                                    externally_provided=[A]).items())
+                                    is_injectable={WithOptionals, B},
+                                    externally_provided={A}).items())
     assert plan == [(A, {}), (WithOptionals, {'a_or_b': A})]
 
     plan = list(andi.plan_for_class(WithOptionals,
-                                    is_injectable=[WithOptionals, B]).items())
+                                    is_injectable={WithOptionals, B}).items())
     assert plan == [(B, {}), (WithOptionals, {'a_or_b': B})]
 
     with pytest.raises(andi.NonProvidableError):
@@ -128,13 +127,13 @@ def test_externally_provided():
     assert plan == {E: {}}
 
     plan = andi.plan_for_class(E, is_injectable=ALL,
-                               externally_provided=[A, B, C, D])
+                               externally_provided={A, B, C, D})
     assert plan.keys() == {B, C, D, E}
     assert list(plan.keys())[-1] == E
     assert plan[E] == {'b': B, 'c': C, 'd': D}
 
     plan = andi.plan_for_class(E, is_injectable=ALL,
-                               externally_provided=[A, B, D])
+                               externally_provided={A, B, D})
     seq = list(plan.keys())
     assert seq.index(A) < seq.index(C)
     assert seq.index(B) < seq.index(C)
@@ -153,14 +152,14 @@ def test_plan_for_func():
         assert type(c) == C
 
     plan, fulfilled_args = andi.plan_for_func(fn, is_injectable=ALL,
-                                              externally_provided=[A])
+                                              externally_provided={A})
     assert fulfilled_args == {'e': E, 'c': C}
     instances = build(plan, {A: ""})
     kwargs = dict(other="yeah!",
                   **{arg: instances[tp] for arg, tp in fulfilled_args.items()})
     fn(**kwargs)
 
-    with pytest.raises(NonProvidableError):
+    with pytest.raises(andi.NonProvidableError):
         andi.plan_for_func(fn, is_injectable=ALL,
                            externally_provided=[A], strict=True)
 
@@ -169,9 +168,9 @@ def test_plan_with_optionals():
     def fn(a: Optional[str]):
         assert a is None
 
-    assert andi.plan_for_func(fn, is_injectable=[type(None), str],
-                              externally_provided=[str]) == ({str: {}}, {'a': str})
-    plan, fulfilled_args = andi.plan_for_func(fn, is_injectable=[type(None)])
+    assert andi.plan_for_func(fn, is_injectable={type(None), str},
+                              externally_provided={str}) == ({str: {}}, {'a': str})
+    plan, fulfilled_args = andi.plan_for_func(fn, is_injectable={type(None)})
     assert plan == {type(None): {}}
     assert fulfilled_args == {'a': type(None)}
     instances = build(plan)
@@ -189,7 +188,7 @@ def test_plan_class_non_annotated():
     plan, fulfilled_args = andi.plan_for_func(
         WithNonAnnArgs.__init__,
         is_injectable=ALL + [WithNonAnnArgs],
-        externally_provided=[A]
+        externally_provided={A}
     )
     assert plan == {A: {}, B: {}}
     assert fulfilled_args == {'a': A, 'b': B}
@@ -199,7 +198,7 @@ def test_plan_class_non_annotated():
                             externally_provided=[A])
 
 
-@pytest.mark.parametrize("strict", [(True), (False)])
+@pytest.mark.parametrize("strict", [[True], [False]])
 def test_plan_no_args(strict):
     def fn():
         return True
