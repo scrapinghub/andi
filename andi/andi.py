@@ -93,7 +93,7 @@ def plan_for_func(func: Callable,
     contains:
 
     * A key, with the type that must be built in this task
-    * The value, with all the arguments required to invoke the key ``__init__``
+    * The value, with all the arguments required to invoke the key constructor
     method and its corresponding type encoded in a dictionary where the key is
     the name of the argument and the value is its type.
 
@@ -128,7 +128,7 @@ def plan_for_func(func: Callable,
 
     If the argument ``strict`` is True then this function will fail
     with ``NonProvidableError`` if not all the required arguments
-    for the input function can be resolved. When False, this function
+    for the input function can be resolved. When ``strict`` is False, this function
     provides only the plan for those arguments that could be resolved.
 
     This function recursively checks for dependencies. If a cyclic dependency is
@@ -205,6 +205,9 @@ def plan_for_class(cls: Type,
     possible to create a plan for building the given class.
 
     See function ``plan_for_func`` for a explanation of the rest of arguments.
+
+    The following doctest example show how this method can be used to create
+    instances of the class ``C``:
 
     >>> class A:
     ...     pass
