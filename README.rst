@@ -82,7 +82,7 @@ So, the logic is the following:
 5. Framework computes argument values (``bar`` in this case).
 6. Framework calls the callback.
 
-Depending on implementation, steps 1-5 may happen iteratevely - e.g.
+Depending on implementation, steps 1-5 may happen iteratively - e.g.
 middlewares may be populating different parts of callback kwargs.
 In this case step (4 - raising an error) can be skipped.
 
@@ -327,7 +327,7 @@ Currently ``andi`` just inspects callable and chooses best concrete types
 a framework needs to create and pass to a callable, without prescribing how
 to create them. This makes ``andi`` useful in various contexts - e.g.
 
-* creation of some objects may require asynchronous funnctions, and it
+* creation of some objects may require asynchronous functions, and it
   may depend on libraries used (asyncio, twisted, etc.)
 * in streaming architectures (e.g. based on Kafka) inspection may happen
   on one machine, while creation of objects may happen on different nodes
