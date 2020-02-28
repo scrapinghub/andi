@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from collections import OrderedDict
 from typing import (
-    Any, Dict, List, Optional, Type, Callable, Union, Container,
+    Dict, List, Optional, Type, Callable, Union, Container,
     get_type_hints, Tuple, cast)
 
 from andi.typeutils import get_union_args, is_union, get_globalns
@@ -80,12 +80,6 @@ def to_provide(
 
 
 Plan = Dict[Type, Dict[str, Type]]
-
-
-class FunctionArguments:
-    """ Key marker to return the inspected function arguments into the
-    ``Plan`` returned by the ``plan`` function """
-    pass
 
 
 def plan_for_func(func: Callable,
@@ -301,22 +295,6 @@ def _plan(class_or_func: Union[Type, Callable],
     return plan_seq
 
 
-def build(plan: Plan, stock: Optional[Dict[Type, Any]] = None):
-    """ TODO: write doc """
-    stock = stock or {}
-    instances = {}
-    for cls, params in plan.items():
-        if cls in stock:
-            instances[cls] = stock[cls]
-        elif cls == FunctionArguments:
-            pass
-        else:
-            kwargs = {param: instances[pcls]
-                      for param, pcls in params.items()}
-            instances[cls] = cls(**kwargs)
-    return instances
-
-
 def plan_str(plan: Plan):
     str_dict = {}
     for cls, params in plan.items():
@@ -350,3 +328,8 @@ def _ensure_input_type_checks_as_func(can_provide, externally_provided
     externally_provided = _ensure_can_provide_func(externally_provided)
     return can_provide, externally_provided
 
+
+class FunctionArguments:
+    """ Key marker to return the inspected function arguments into the
+    ``Plan`` returned by the ``_plan`` function """
+    pass

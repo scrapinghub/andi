@@ -3,7 +3,8 @@ from typing import Union, Optional
 import pytest
 
 import andi
-from andi import plan_str, NonProvidableError, FunctionArguments
+from tests.utils import build
+from andi import NonProvidableError
 
 
 class A:
@@ -47,7 +48,7 @@ def test_plan_and_build():
         (D, {'a': A, 'c': C}),
         (E, {'b': B, 'c': C, 'd': D})
     ]
-    instances = andi.build(plan, {A: ""})
+    instances = build(plan, {A: ""})
     assert type(instances[E]) == E
 
 
@@ -137,7 +138,7 @@ def test_plan_for_func():
 
     plan, fulfilled_args = andi.plan_for_func(fn, ALL, [A])
     assert fulfilled_args == {'e': E, 'c': C}
-    instances = andi.build(plan, {A: ""})
+    instances = build(plan, {A: ""})
     kwargs = dict(other="yeah!",
                   **{arg: instances[tp] for arg, tp in fulfilled_args.items()})
     fn(**kwargs)
@@ -155,7 +156,7 @@ def test_plan_with_optionals():
     plan, fulfilled_args = andi.plan_for_func(fn, [type(None)], [])
     assert plan == {type(None): {}}
     assert fulfilled_args == {'a': type(None)}
-    instances = andi.build(plan)
+    instances = build(plan)
     assert instances[type(None)] is None
     fn(**{arg: instances[tp] for arg, tp in fulfilled_args.items()})
 
@@ -184,5 +185,5 @@ def test_plan_no_args(strict):
     plan, fulfilled_args = andi.plan_for_func(fn, [], [], strict)
     assert plan == {}
     assert fulfilled_args == {}
-    instances = andi.build(plan)
+    instances = build(plan)
     assert fn(**{arg: instances[tp] for arg, tp in fulfilled_args.items()})
