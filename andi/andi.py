@@ -159,7 +159,7 @@ def plan_for_func(func: Callable, *,
     ...                               for arg, arg_tp in args.items()})
     ...     return instances
     ...
-    >>> plan, fulfilled_args = plan_for_func(fn, [A, B], [])
+    >>> plan, fulfilled_args = plan_for_func(fn, is_injectable=[A, B])
     >>> instances = build(plan)
     >>> fn(**dict(non_annotated='non_annotated',
     ...         **{arg: instances[tp] for arg, tp in fulfilled_args.items()}))
@@ -228,7 +228,7 @@ def plan_for_class(cls: Type, *,
     ...                               for arg, arg_tp in args.items()})
     ...     return instances
     ...
-    >>> plan = plan_for_class(C, [A, B, C], [])
+    >>> plan = plan_for_class(C, is_injectable=[A, B, C])
     >>> instances = build(plan)
     >>> c = instances[C]  # The instance of C class with all deps resolved
     >>> assert type(c) == C
