@@ -295,13 +295,6 @@ def _plan(class_or_func: Union[Type, Callable],
     return plan_seq
 
 
-def plan_str(plan: Plan):
-    str_dict = {}
-    for cls, params in plan.items():
-        str_dict[cls.__name__] = {p: c.__name__ for p, c in params.items()}
-    return "\n".join(map(str, str_dict.items()))
-
-
 def _select_type(types, is_injectable, externally_provided):
     """ Choose the first type that can be provided. None otherwise. """
     sel_cls = None
