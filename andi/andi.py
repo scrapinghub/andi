@@ -82,9 +82,9 @@ def to_provide(
 Plan = Dict[Type, Dict[str, Type]]
 
 
-def plan_for_func(func: Callable,
+def plan_for_func(func: Callable, *,
                   is_injectable: TypeContainerOrCallable,
-                  externally_provided: TypeContainerOrCallable,
+                  externally_provided: Optional[TypeContainerOrCallable] = None,
                   strict=False) -> Tuple[Plan, Dict[str, Type]]:
     """ Plan the sequence of instantiation tasks required to fulfill the
     the arguments of the given function (dependency injection).
@@ -192,9 +192,9 @@ def plan_for_func(func: Callable,
     return plan, fulfilled_arguments
 
 
-def plan_for_class(cls: Type,
+def plan_for_class(cls: Type, *,
                    is_injectable: TypeContainerOrCallable,
-                   externally_provided: TypeContainerOrCallable
+                   externally_provided: Optional[TypeContainerOrCallable] = None
                    ) -> Plan:
     """ Plan the sequence of instantiation tasks required to create an instance
     of the given cls.
@@ -308,8 +308,10 @@ def _select_type(types, is_injectable, externally_provided):
     return sel_cls
 
 
-def _ensure_can_provide_func(cont_or_call: TypeContainerOrCallable
+def _ensure_can_provide_func(cont_or_call: Optional[TypeContainerOrCallable]
                              ) -> Callable[[Type], bool]:
+    if cont_or_call is None:
+        return lambda x: False
     if isinstance(cont_or_call, Container):
         return cont_or_call.__contains__
     return cont_or_call
@@ -319,7 +321,6 @@ def _ensure_input_type_checks_as_func(can_provide, externally_provided
                                       ) -> Tuple[Callable[[Type], bool],
                                                Callable[[Type], bool]]:
     assert can_provide is not None
-    assert externally_provided is not None
     can_provide = _ensure_can_provide_func(can_provide)
     externally_provided = _ensure_can_provide_func(externally_provided)
     return can_provide, externally_provided
