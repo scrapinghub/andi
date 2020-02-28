@@ -50,7 +50,7 @@ def to_provide(
             Callable,
             Dict[str, List[Optional[Type]]]
         ],
-        can_provide: TypeContainerOrCallable
+        is_injectable: TypeContainerOrCallable
         ) -> Dict[str, Optional[Type]]:
     """
     Return a dictionary ``{argument_name: type}`` with types which should
@@ -59,7 +59,7 @@ def to_provide(
     ``arguments_or_func`` should be either a callable, or
     a result of andi.inspect call for a callable.
 
-    ``can_provide`` can be either a function which receives a type and
+    ``is_injectable`` can be either a function which receives a type and
     returns True if argument of such type can be provided, or a container
     (e.g. a set) with supported types.
     """
@@ -68,11 +68,12 @@ def to_provide(
     else:
         arguments = arguments_or_func
 
-    can_provide = _ensure_can_provide_func(can_provide)
+    is_injectable, externally_provided = _ensure_input_type_checks_as_func(
+        is_injectable, [])
 
     result = {}
     for argname, types in arguments.items():
-        sel_cls = _select_type(types, can_provide)
+        sel_cls = _select_type(types, is_injectable, externally_provided)
         if sel_cls:
             result[argname] = sel_cls
     return result
@@ -87,50 +88,74 @@ class FunctionArguments:
     pass
 
 
-def plan_for_class(cls: Type,
-                   can_provide: TypeContainerOrCallable,
-                   externally_provided: TypeContainerOrCallable
-                   ) -> Plan:
-    """
-
-    :param cls:
-    :param can_provide:
-    :param externally_provided:
-    :return:
-    """
-    assert isinstance(cls, type)
-    can_provide, externally_provided = _ensure_input_type_checks_as_func(
-        can_provide, externally_provided)
-    return _plan(cls, can_provide, externally_provided, True, None)
-
-
 def plan_for_func(func: Callable,
-                  can_provide: TypeContainerOrCallable,
+                  is_injectable: TypeContainerOrCallable,
                   externally_provided: TypeContainerOrCallable,
                   strict=False) -> Tuple[Plan, Dict[str, Type]]:
-    """ Check if it is possible to fulfill the arguments to invoke the inputS
-    function (or to the create the input class if a class is given). If possible
-    then a plan to build the requirements is returned. This plan is
-    an ``OrderedDict`` containing the proper instantiation order
-    for each type so that the dependencies existence is assured. The keys in
-    this plan are the type, and the values are dicts where the keys are the
-    params names and the values are the type required for this parameter.
+    """ Plan the sequence of instantiation tasks required to fulfill the
+    the arguments of the given function (dependency injection).
 
-    If the input is a function then there will be a final entry in the plan with
-    the key ``FunctionArguments`` that contains the dictionary of the
-    fulfilled arguments for this function (could be incomplete).
+    The plan is a sequence encoded in a ``OrderedDict``. Each task in the plan
+    contains:
+
+    * A key, with the type that must be built in this task
+    * The value, with all the arguments required to invoke the key ``__init__``
+    method and its corresponding type encoded in a dictionary where the key is
+    the name of the argument and the value is its type.
+
+    The best way to understand a plan is to see how a typical building
+    function would use it to build the instances:
+
+    ```
+    def build(plan):  # Build all the instances from a plan
+        instances = {}
+        for tp, args in plan.items():
+            instances[tp] = tp(**{arg: instances[arg_tp]
+                                  for arg, arg_tp in args.items()})
+        return instances
+    ```
+
+    Note that the generated instances dictionary would contain not only the
+    dependencies for the function given as argument, but also all the
+    dependencies of the dependencies. In other words, the plan function
+    is able to plan the whole tree of dependencies.
+
+    This function returns a second dictionary (argument_name -> type) with
+    the input function arguments for which it was possible to create a plan.
+    This way the function could be invoked with the following code:
+
+    ```
+    plan, fulfilled_args = plan_for_func(func, ...)
+    instances = build(plan)
+    func(dict(other_arg='value',  # An argument that is out of the scope of dependency injection
+              **{arg: instances[arg_tp]
+                 for arg, arg_tp in fulfilled_args.items()}))
+    ```
+
+    If the argument ``strict`` is True then this function will fail
+    with ``NonProvidableError`` if not all the required arguments
+    for the input function can be resolved. When False, this function
+    provides only the plan for those arguments that could be resolved.
 
     This function recursively checks for dependencies. If a cyclic dependency is
     found the error ``CyclicDependencyError`` is raised.
+
+    Any type found in the dependency tree that is injectable can as well
+    has its own dependencies. If the planner fails to fulfill any of this
+    dependencies a ``NonProvidableError`` will be raised.
+
+    See a full example in the following doctest:
 
     >>> class A:
     ...     value = 'a'
     ...
     >>> class B:
     ...     def __init__(self, a: A):
+    ...         self.a = a
     ...         self.value = 'b'
     ...
     >>> def fn(a: A, b: B, non_annotated):
+    ...     assert b.a is a
     ...     return 'Called with {}, {}, {}'.format(a.value, b.value, non_annotated)
     ...
     >>> def build(plan):  # Build all the instances from a plan
@@ -147,46 +172,81 @@ def plan_for_func(func: Callable,
     'Called with a, b, non_annotated'
 
 
-    :param class_or_func: If a class is provided this function will create
-                          a plan to fulfil its ``__init__`` method. The class
-                          itself will be part of the plan in the las position.
-                          If a plan for all the requirements cannot be created
-                          the function will fail with ``NonProvidableError``.
-                          If a method is given then this function will try
-                          to create a plan to create all its arguments, but it
-                          won't fail if all the required parameters cannot
-                          be fulfilled. The last entry in this case will be
-                          the arguments that could be fulfilled for the input
-                          function with its types and the key will be
-                          ``FunctionArguments``
-    :param can_provide: A predicate or a dictionary that says if a class
-                        is providable. Any required class found
-                        by this function should be providable, otherwise,
-                        ``NonProvidableError`` will be raised. There one single
-                        exception for that: if a function is received as
-                        input then non providable arguments
-                        are allowed for the function itself. They won't be
-                        in the returned plan. It is the caller responsibility
-                        to deal with this case.
+    :param func: Function to be inspected.
+    :param is_injectable: A predicate or a dictionary that says if a type
+                        is injectable. The planer is responsible to deal
+                        with all types that are injectable when traversing
+                        the dependency graph. It will fail with
+                        ``NonProvidableError`` if it is not possible to generate
+                        a plan for any injectable type found.
     :param externally_provided: A predicate or a dictionary that says if a class
                                 will be provided externally.
-                                The ``plan`` function won't try to resolve its
+                                The planner won't try to resolve its
                                 dependencies, so it acts as a way to stop
                                 dependency injection for these classes where
                                 we don't want it because they will be provided by
                                 other means.
-    :return: The plan ready to be used as ``build`` method input.
+    :return: A tuple where the first element is the plan and the second is
+             a dictionary with the arguments that finally it was possible to
+             generate a plan for.
     """
     assert not isinstance(func, type)
-    can_provide, externally_provided = _ensure_input_type_checks_as_func(
-        can_provide, externally_provided)
-    plan = _plan(func, can_provide, externally_provided, strict, None)
+    is_injectable, externally_provided = _ensure_input_type_checks_as_func(
+        is_injectable, externally_provided)
+    plan = _plan(func, is_injectable, externally_provided, strict, None)
     fulfilled_arguments = plan.pop(FunctionArguments)
     return plan, fulfilled_arguments
 
 
+def plan_for_class(cls: Type,
+                   is_injectable: TypeContainerOrCallable,
+                   externally_provided: TypeContainerOrCallable
+                   ) -> Plan:
+    """ Plan the sequence of instantiation tasks required to create an instance
+    of the given cls.
+
+    Equivalent to function ``plan_for_func`` but for a class.
+
+    Note that is function will raise ``NonProvidableError`` if is not
+    possible to create a plan for building the given class.
+
+    See function ``plan_for_func`` for a explanation of the rest of arguments.
+
+    >>> class A:
+    ...     pass
+    ...
+    >>> class B:
+    ...     def __init__(self, a: A):
+    ...         self.a = a
+    ...
+    >>> class C:
+    ...     def __init__(self, a: A, b: B):
+    ...         self.a = a
+    ...         self.b = b
+    ...
+    >>> def build(plan):  # Build all the instances from a plan
+    ...     instances = {}
+    ...     for tp, args in plan.items():
+    ...         instances[tp] = tp(**{arg: instances[arg_tp]
+    ...                               for arg, arg_tp in args.items()})
+    ...     return instances
+    ...
+    >>> plan = plan_for_class(C, [A, B, C], [])
+    >>> instances = build(plan)
+    >>> c = instances[C]  # The instance of C class with all deps resolved
+    >>> assert type(c) == C
+    >>> assert c.a is instances[A]
+    >>> assert c.b is instances[B]
+    >>> assert c.b.a is instances[A]
+    """
+    assert isinstance(cls, type)
+    is_injectable, externally_provided = _ensure_input_type_checks_as_func(
+        is_injectable, externally_provided)
+    return _plan(cls, is_injectable, externally_provided, True, None)
+
+
 def _plan(class_or_func: Union[Type, Callable],
-          can_provide: Callable[[Type], bool],
+          is_injectable: Callable[[Type], bool],
           externally_provided: Callable[[Type], bool],
           strict,
           dependency_stack=None) -> Plan:
@@ -198,13 +258,14 @@ def _plan(class_or_func: Union[Type, Callable],
 
     if input_is_type:
         cls = cast(Type, class_or_func)
-        if not can_provide(cls):
-            raise NonProvidableError(
-                "Type {} cannot be provided".format(as_class_names(cls)))
-
         if externally_provided(cls):
             plan_seq[cls] = {}
             return plan_seq
+
+        if not is_injectable(cls):
+            raise NonProvidableError(
+                "Type {} cannot be provided".format(as_class_names(cls)))
+
 
         if cls in dependency_stack:
             raise CyclicDependencyError(
@@ -216,10 +277,10 @@ def _plan(class_or_func: Union[Type, Callable],
         arguments = inspect(class_or_func)
 
     for argname, types in arguments.items():
-        sel_cls = _select_type(types, can_provide)
+        sel_cls = _select_type(types, is_injectable, externally_provided)
         if sel_cls is not None:
             if sel_cls not in plan_seq:
-                plan_seq.update(_plan(sel_cls, can_provide, externally_provided,
+                plan_seq.update(_plan(sel_cls, is_injectable, externally_provided,
                                       True, dependency_stack))
             type_for_arg[argname] = sel_cls
         else:
@@ -263,11 +324,11 @@ def plan_str(plan: Plan):
     return "\n".join(map(str, str_dict.items()))
 
 
-def _select_type(types, can_provide):
+def _select_type(types, is_injectable, externally_provided):
     """ Choose the first type that can be provided. None otherwise. """
     sel_cls = None
     for candidate in types:
-        if can_provide(candidate):
+        if is_injectable(candidate) or externally_provided(candidate):
             sel_cls = candidate
             break
     return sel_cls

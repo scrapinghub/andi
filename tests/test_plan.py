@@ -91,13 +91,24 @@ def test_cannot_be_provided():
     assert plan == [(A, {}), (WithOptionals, {'a_or_b': A})]
 
     plan = list(andi.plan_for_class(WithOptionals, [WithOptionals, B], [A]).items())
+    assert plan == [(A, {}), (WithOptionals, {'a_or_b': A})]
+
+    plan = list(andi.plan_for_class(WithOptionals, [WithOptionals, B], []).items())
     assert plan == [(B, {}), (WithOptionals, {'a_or_b': B})]
 
     with pytest.raises(andi.NonProvidableError):
-        andi.plan_for_class(WithOptionals, [WithOptionals], [A]).items()
+        andi.plan_for_class(WithOptionals, [WithOptionals], []).items()
 
 
 def test_externally_provided():
+    plan, fulfilled_args = andi.plan_for_func(E.__init__, ALL, ALL)
+    assert plan == {B: {}, C: {}, D: {}}
+    assert fulfilled_args == {'b': B, 'c': C, 'd': D}
+
+    plan, fulfilled_args = andi.plan_for_func(E.__init__, [], ALL)
+    assert plan == {B: {}, C: {}, D: {}}
+    assert fulfilled_args == {'b': B, 'c': C, 'd': D}
+
     plan = andi.plan_for_class(E, ALL, ALL)
     assert plan == {E: {}}
 
