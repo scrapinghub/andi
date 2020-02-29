@@ -191,8 +191,12 @@ def plan_for_func(func: Callable, *,
     assert not isinstance(func, type)
     is_injectable, externally_provided = _ensure_input_type_checks_as_func(
         is_injectable, externally_provided)
-    plan = _plan(func, is_injectable, externally_provided, strict, None)
     fulfilled_arguments = plan.pop(FunctionArguments)
+    plan = _plan(func,
+                 is_injectable=is_injectable,
+                 externally_provided=externally_provided,
+                 strict=strict,
+                 dependency_stack=None)
     return plan, fulfilled_arguments
 
 
@@ -244,10 +248,14 @@ def plan_for_class(cls: Type, *,
     assert isinstance(cls, type)
     is_injectable, externally_provided = _ensure_input_type_checks_as_func(
         is_injectable, externally_provided)
-    return _plan(cls, is_injectable, externally_provided, True, None)
+    return _plan(cls,
+                 is_injectable=is_injectable,
+                 externally_provided=externally_provided,
+                 strict=True,
+                 dependency_stack=None)
 
 
-def _plan(class_or_func: Union[Type, Callable],
+def _plan(class_or_func: Union[Type, Callable], *,
           is_injectable: Callable[[Type], bool],
           externally_provided: Callable[[Type], bool],
           strict,
@@ -282,8 +290,12 @@ def _plan(class_or_func: Union[Type, Callable],
         sel_cls = _select_type(types, is_injectable, externally_provided)
         if sel_cls is not None:
             if sel_cls not in plan_seq:
-                plan_seq.update(_plan(sel_cls, is_injectable, externally_provided,
-                                      True, dependency_stack))
+                plan = _plan(sel_cls,
+                             is_injectable=is_injectable,
+                             externally_provided=externally_provided,
+                             strict=True,
+                             dependency_stack=dependency_stack)
+                plan_seq.update(plan)
             type_for_arg[argname] = sel_cls
         else:
             if input_is_type or strict:
