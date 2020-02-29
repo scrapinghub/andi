@@ -149,18 +149,19 @@ def plan_for_func(func: Callable, *,
     ...     assert b.a is a
     ...     return 'Called with {}, {}, {}'.format(a.value, b.value, non_annotated)
     ...
+    >>> def _get_kwargs(instances, kwarg_types):
+    ...     return {name: instances[cls] for name, cls in kwarg_types.items()}
+    ...
     >>> def build(plan):  # Build all the instances from a plan
     ...     instances = {}
     ...     for cls, args in plan.items():
-    ...         kwargs = {arg: instances[arg_cls]
-    ...                   for arg, arg_cls in args.items()}
-    ...         instances[cls] = cls(**kwargs)
+    ...         instances[cls] = cls(**_get_kwargs(instances, args))
     ...     return instances
     ...
     >>> plan, fulfilled_args = plan_for_func(fn, is_injectable=[A, B])
     >>> instances = build(plan)
-    >>> kwargs = {arg: instances[arg_cls] for arg, arg_cls in fulfilled_args.items()}
-    >>> fn(non_annotated='non_annotated', **kwargs)
+    >>> fn(non_annotated='non_annotated',
+    ...    **_get_kwargs(instances, fulfilled_args))
     'Called with a, b, non_annotated'
 
 
