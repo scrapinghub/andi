@@ -191,12 +191,12 @@ def plan_for_func(func: Callable, *,
     assert not isinstance(func, type)
     is_injectable, externally_provided = _ensure_input_type_checks_as_func(
         is_injectable, externally_provided)
-    fulfilled_arguments = plan.pop(FunctionArguments)
     plan = _plan(func,
                  is_injectable=is_injectable,
                  externally_provided=externally_provided,
                  strict=strict,
                  dependency_stack=None)
+    fulfilled_arguments = plan.pop(_FunctionArguments)
     return plan, fulfilled_arguments
 
 
@@ -311,7 +311,7 @@ def _plan(class_or_func: Union[Type, Callable], *,
                 raise NonProvidableError(msg)
 
 
-    plan_seq[cls if input_is_type else FunctionArguments] = type_for_arg
+    plan_seq[cls if input_is_type else _FunctionArguments] = type_for_arg
     return plan_seq
 
 
@@ -343,7 +343,7 @@ def _ensure_input_type_checks_as_func(can_provide, externally_provided
     return can_provide, externally_provided
 
 
-class FunctionArguments:
+class _FunctionArguments:
     """ Key marker to return the inspected function arguments into the
     ``Plan`` returned by the ``_plan`` function """
     pass
