@@ -314,12 +314,9 @@ def _plan(class_or_func: Union[Type, Callable], *,
 
 def _select_type(types, is_injectable, externally_provided):
     """ Choose the first type that can be provided. None otherwise. """
-    sel_cls = None
     for candidate in types:
         if is_injectable(candidate) or externally_provided(candidate):
-            sel_cls = candidate
-            break
-    return sel_cls
+            return candidate
 
 
 def _ensure_can_provide_func(cont_or_call: Optional[TypeContainerOrCallable]
