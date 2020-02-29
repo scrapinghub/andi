@@ -4,9 +4,13 @@ from typing import (
     Dict, List, Optional, Type, Callable, Union, Container,
     get_type_hints, Tuple, cast)
 
-from andi.typeutils import get_union_args, is_union, get_globalns
+from andi.typeutils import (
+    get_union_args,
+    is_union,
+    get_globalns,
+    get_unannotated_params,
+)
 from andi.errors import CyclicDependencyError, NonProvidableError
-from inspect import signature, Parameter
 
 
 def inspect(func: Callable) -> Dict[str, List[Optional[Type]]]:
@@ -17,7 +21,8 @@ def inspect(func: Callable) -> Dict[str, List[Optional[Type]]]:
     """
     globalns = get_globalns(func)
     annotations = get_type_hints(func, globalns)
-    _include_non_annotated_parameters(func, annotations)
+    for name in get_unannotated_params(func, annotations):
+        annotations[name] = None
     annotations.pop('return', None)
     annotations.pop('self', None)  # FIXME: pop first argument of methods
     annotations.pop('cls', None)
@@ -28,14 +33,6 @@ def inspect(func: Callable) -> Dict[str, List[Optional[Type]]]:
         else:
             res[key] = [] if tp is None else [tp]
     return res
-
-
-def _include_non_annotated_parameters(func, annotations):
-    for name, param in signature(func).parameters.items():
-        if (name not in annotations and
-                param.kind not in {Parameter.VAR_POSITIONAL,
-                                   Parameter.VAR_KEYWORD}):
-            annotations[name] = None
 
 
 TypeContainerOrCallable = Union[
