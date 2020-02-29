@@ -5,7 +5,6 @@ from typing import (
     get_type_hints, Tuple, cast)
 
 from andi.typeutils import get_union_args, is_union, get_globalns
-from andi.utils import as_class_names
 from andi.errors import CyclicDependencyError, NonProvidableError
 from inspect import signature, Parameter
 
@@ -267,13 +266,13 @@ def _plan(class_or_func: Union[Type, Callable],
 
         if not is_injectable(cls):
             raise NonProvidableError(
-                "Type {} cannot be provided".format(as_class_names(cls)))
+                "Type {} cannot be provided".format(cls))
 
 
         if cls in dependency_stack:
             raise CyclicDependencyError(
                 "Cyclic dependency found. Dependency graph: {}".format(
-                    " -> ".join(as_class_names(dependency_stack + [cls]))))
+                    " -> ".join(map(str, dependency_stack + [cls]))))
         dependency_stack = dependency_stack + [cls]
         arguments = inspect(cls.__init__)
     else:
@@ -291,12 +290,12 @@ def _plan(class_or_func: Union[Type, Callable],
                 if not types:
                     msg = "Parameter '{}' is lacking annotations in " \
                           "'{}.__init__()'. Not possible to build a plan".format(
-                        argname, as_class_names(class_or_func))
+                        argname, class_or_func)
                 else:
-                    msg = "Any of {} types are required ".format(as_class_names(types))
+                    msg = "Any of {} types are required ".format(types)
                     msg += " for parameter '{}' ".format(argname)
                     msg += " in '{}.__init__()' but none can be provided".format(
-                        as_class_names(class_or_func))
+                        class_or_func)
                 raise NonProvidableError(msg)
 
 
