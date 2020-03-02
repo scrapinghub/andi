@@ -53,7 +53,7 @@ def get_unannotated_params(func, annotations: Container) -> List[str]:
     ['x', 'z']
     """
     ARGS_KWARGS = {
-        inspect.Parameter.VAR_POSITIONAL,  # **args argument
+        inspect.Parameter.VAR_POSITIONAL,  # *args argument
         inspect.Parameter.VAR_KEYWORD      # **kwargs argument
     }
     res = []
