@@ -4,10 +4,13 @@ from typing import (
     Dict, List, Optional, Type, Callable, Union, Container,
     get_type_hints, Tuple, cast)
 
-from andi.typeutils import get_union_args, is_union, get_globalns
-from andi.utils import as_class_names
+from andi.typeutils import (
+    get_union_args,
+    is_union,
+    get_globalns,
+    get_unannotated_params,
+)
 from andi.errors import CyclicDependencyError, NonProvidableError
-from inspect import signature, Parameter
 
 
 def inspect(func: Callable) -> Dict[str, List[Optional[Type]]]:
@@ -18,7 +21,8 @@ def inspect(func: Callable) -> Dict[str, List[Optional[Type]]]:
     """
     globalns = get_globalns(func)
     annotations = get_type_hints(func, globalns)
-    _include_non_annotated_parameters(func, annotations)
+    for name in get_unannotated_params(func, annotations):
+        annotations[name] = None
     annotations.pop('return', None)
     annotations.pop('self', None)  # FIXME: pop first argument of methods
     annotations.pop('cls', None)
@@ -29,14 +33,6 @@ def inspect(func: Callable) -> Dict[str, List[Optional[Type]]]:
         else:
             res[key] = [] if tp is None else [tp]
     return res
-
-
-def _include_non_annotated_parameters(func, annotations):
-    for name, param in signature(func).parameters.items():
-        if (name not in annotations and
-                param.kind not in {Parameter.VAR_POSITIONAL,
-                                   Parameter.VAR_KEYWORD}):
-            annotations[name] = None
 
 
 TypeContainerOrCallable = Union[
@@ -153,18 +149,19 @@ def plan_for_func(func: Callable, *,
     ...     assert b.a is a
     ...     return 'Called with {}, {}, {}'.format(a.value, b.value, non_annotated)
     ...
+    >>> def _get_kwargs(instances, kwarg_types):
+    ...     return {name: instances[cls] for name, cls in kwarg_types.items()}
+    ...
     >>> def build(plan):  # Build all the instances from a plan
     ...     instances = {}
     ...     for cls, args in plan.items():
-    ...         kwargs = {arg: instances[arg_cls]
-    ...                   for arg, arg_cls in args.items()}
-    ...         instances[cls] = cls(**kwargs)
+    ...         instances[cls] = cls(**_get_kwargs(instances, args))
     ...     return instances
     ...
     >>> plan, fulfilled_args = plan_for_func(fn, is_injectable=[A, B])
     >>> instances = build(plan)
-    >>> kwargs = {arg: instances[arg_cls] for arg, arg_cls in fulfilled_args.items()}
-    >>> fn(non_annotated='non_annotated', **kwargs)
+    >>> fn(non_annotated='non_annotated',
+    ...    **_get_kwargs(instances, fulfilled_args))
     'Called with a, b, non_annotated'
 
 
@@ -192,8 +189,12 @@ def plan_for_func(func: Callable, *,
     assert not isinstance(func, type)
     is_injectable, externally_provided = _ensure_input_type_checks_as_func(
         is_injectable, externally_provided)
-    plan = _plan(func, is_injectable, externally_provided, strict, None)
-    fulfilled_arguments = plan.pop(FunctionArguments)
+    plan = _plan(func,
+                 is_injectable=is_injectable,
+                 externally_provided=externally_provided,
+                 strict=strict,
+                 dependency_stack=None)
+    fulfilled_arguments = plan.pop(_FunctionArguments)
     return plan, fulfilled_arguments
 
 
@@ -245,10 +246,14 @@ def plan_for_class(cls: Type, *,
     assert isinstance(cls, type)
     is_injectable, externally_provided = _ensure_input_type_checks_as_func(
         is_injectable, externally_provided)
-    return _plan(cls, is_injectable, externally_provided, True, None)
+    return _plan(cls,
+                 is_injectable=is_injectable,
+                 externally_provided=externally_provided,
+                 strict=True,
+                 dependency_stack=None)
 
 
-def _plan(class_or_func: Union[Type, Callable],
+def _plan(class_or_func: Union[Type, Callable], *,
           is_injectable: Callable[[Type], bool],
           externally_provided: Callable[[Type], bool],
           strict,
@@ -267,13 +272,13 @@ def _plan(class_or_func: Union[Type, Callable],
 
         if not is_injectable(cls):
             raise NonProvidableError(
-                "Type {} cannot be provided".format(as_class_names(cls)))
+                "Type {} cannot be provided".format(cls))
 
 
         if cls in dependency_stack:
             raise CyclicDependencyError(
                 "Cyclic dependency found. Dependency graph: {}".format(
-                    " -> ".join(as_class_names(dependency_stack + [cls]))))
+                    " -> ".join(map(str, dependency_stack + [cls]))))
         dependency_stack = dependency_stack + [cls]
         arguments = inspect(cls.__init__)
     else:
@@ -283,35 +288,36 @@ def _plan(class_or_func: Union[Type, Callable],
         sel_cls = _select_type(types, is_injectable, externally_provided)
         if sel_cls is not None:
             if sel_cls not in plan_seq:
-                plan_seq.update(_plan(sel_cls, is_injectable, externally_provided,
-                                      True, dependency_stack))
+                plan = _plan(sel_cls,
+                             is_injectable=is_injectable,
+                             externally_provided=externally_provided,
+                             strict=True,
+                             dependency_stack=dependency_stack)
+                plan_seq.update(plan)
             type_for_arg[argname] = sel_cls
         else:
             if input_is_type or strict:
                 if not types:
                     msg = "Parameter '{}' is lacking annotations in " \
                           "'{}.__init__()'. Not possible to build a plan".format(
-                        argname, as_class_names(class_or_func))
+                        argname, class_or_func)
                 else:
-                    msg = "Any of {} types are required ".format(as_class_names(types))
+                    msg = "Any of {} types are required ".format(types)
                     msg += " for parameter '{}' ".format(argname)
                     msg += " in '{}.__init__()' but none can be provided".format(
-                        as_class_names(class_or_func))
+                        class_or_func)
                 raise NonProvidableError(msg)
 
 
-    plan_seq[cls if input_is_type else FunctionArguments] = type_for_arg
+    plan_seq[cls if input_is_type else _FunctionArguments] = type_for_arg
     return plan_seq
 
 
 def _select_type(types, is_injectable, externally_provided):
     """ Choose the first type that can be provided. None otherwise. """
-    sel_cls = None
     for candidate in types:
         if is_injectable(candidate) or externally_provided(candidate):
-            sel_cls = candidate
-            break
-    return sel_cls
+            return candidate
 
 
 def _ensure_can_provide_func(cont_or_call: Optional[TypeContainerOrCallable]
@@ -332,7 +338,7 @@ def _ensure_input_type_checks_as_func(can_provide, externally_provided
     return can_provide, externally_provided
 
 
-class FunctionArguments:
+class _FunctionArguments:
     """ Key marker to return the inspected function arguments into the
     ``Plan`` returned by the ``_plan`` function """
     pass
