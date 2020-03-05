@@ -47,6 +47,8 @@ PlanMapping = MutableMapping[Type, Dict[str, Type]]
 class Plan(PlanMapping):
     """
     The plan resultant of executing the ``plan`` function.
+    It contains a sequence of tasks that should be executed in order because
+    they are dependency between them.
     """
 
     def __init__(self):
@@ -76,12 +78,13 @@ class Plan(PlanMapping):
     @property
     def dependencies(self) -> PlanMapping:
         """
-        The plan for build the dependencies of the last task of the plan.
+        The plan to build the dependencies of the last task of the plan.
         Useful when it is known that the last task of the plan could be
         incomplete, that is, not all dependencies for the last task could be
         resolved. In such a case is convenient to execute the plan
-        for the dependencies and the have a custom execution for the
-        last task of the plan.
+        for the dependencies and then have a custom task execution for the
+        last task of the plan where those dependencies not resolved are
+        provided by other means.
         """
         return OrderedDict(list(self.items())[:-1])
 
@@ -109,7 +112,7 @@ def plan(class_or_func: Callable, *,
     Each task in the plan contains:
 
     * A key, with the class/function that must be built/invoked in this task
-    * The value, which a dictionary with all the kwargs required for the
+    * The value, with a dictionary with all the kwargs required for the
       key build/invocation process. This dictionary has the argument names as keys
       and classes/functions as values.
 
@@ -118,10 +121,10 @@ def plan(class_or_func: Callable, *,
 
         def build(plan):  # Build all the instances from a plan
             instances = {}
-            for cls, args in plan.items():
+            for fn_or_cls, args in plan.items():
                 kwargs = {arg: instances[arg_cls]
                           for arg, arg_cls in args.items()}
-                instances[cls] = cls(**kwargs)
+                instances[fn_or_cls] = fn_or_cls(**kwargs)
             return instances
 
     Note that the generated instances dictionary would contain not only the
@@ -178,8 +181,8 @@ def plan(class_or_func: Callable, *,
     ...
     >>> def build(plan):  # Build all the instances from a plan
     ...     instances = {}
-    ...     for cls, args in plan.items():
-    ...         instances[cls] = cls(**_get_kwargs(instances, args))
+    ...     for fn_or_cls, args in plan.items():
+    ...         instances[fn_or_cls] = fn_or_cls(**_get_kwargs(instances, args))
     ...     return instances
     ...
     >>> plan_tasks = plan(fn, is_injectable=[A, B])
@@ -224,8 +227,9 @@ def plan(class_or_func: Callable, *,
         be resolved, so the last task of the plan could be incomplete.
     :return: A plan
     """
-    is_injectable, externally_provided = _ensure_input_type_checks_as_func(
-        is_injectable, externally_provided)
+    is_injectable = _ensure_can_provide_func(is_injectable)
+    externally_provided = _ensure_can_provide_func(externally_provided)
+
     plan = _plan(class_or_func,
                  is_injectable=is_injectable,
                  externally_provided=externally_provided,
@@ -306,13 +310,3 @@ def _ensure_can_provide_func(cont_or_call: Optional[ContainerOrCallableType]
     if isinstance(cont_or_call, Container):
         return cont_or_call.__contains__
     return cont_or_call
-
-
-def _ensure_input_type_checks_as_func(can_provide, externally_provided
-                                      ) -> Tuple[Callable[[Callable], bool],
-                                               Callable[[Callable], bool]]:
-    assert can_provide is not None
-    can_provide = _ensure_can_provide_func(can_provide)
-    externally_provided = _ensure_can_provide_func(externally_provided)
-    return can_provide, externally_provided
-
