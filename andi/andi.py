@@ -156,7 +156,7 @@ def plan(class_or_func: Callable, *,
 
     Any type found in the dependency tree that is injectable can as well
     has its own dependencies. If the planner fails to fulfill the dependencies 
-    of any injectable found in the tree, ``NonProvidableError`` will be raised, 
+    of any injectable found in the tree, ``NonProvidableError`` is raised, 
     regardless of a value of ``strict`` argument (even if strict=False).
 
     This function recursively checks for dependencies. If a cyclic dependency
