@@ -142,7 +142,7 @@ def plan(class_or_func: Callable, *,
     because they will be provided by other means).
     In such a cases the above proposed ``build`` function won't work.
 
-    The plan methods ``dependencies`` and ``final_arguments`` comes to the
+    The plan properties ``dependencies`` and ``final_arguments`` come to the
     rescue in such cases, and the build process would be slightly different::
 
         plan = andi.plan(func, ...)
