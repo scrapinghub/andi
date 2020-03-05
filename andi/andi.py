@@ -185,7 +185,7 @@ def plan(class_or_func: Callable, *,
     ...         instances[fn_or_cls] = fn_or_cls(**_get_kwargs(instances, args))
     ...     return instances
     ...
-    >>> plan_tasks = plan(fn, is_injectable=[A, B])
+    >>> plan_tasks = plan(fn, is_injectable={A, B})
     >>> instances = build(plan_tasks.dependencies)
     >>> # Finally invoking the function with all the dependencies resolved
     >>> fn(non_annotated='non_annotated',
