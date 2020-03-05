@@ -199,7 +199,7 @@ def plan(class_or_func: Callable, *,
     ...         self.a = a
     ...         self.b = b
     ...
-    >>> plan_tasks = plan(C, is_injectable=[A, B, C], strict=True)
+    >>> plan_tasks = plan(C, is_injectable={A, B, C}, strict=True)
     >>> instances = build(plan_tasks)
     >>> c = instances[C]  # Instance of C class with all dependencies resolved
     >>> assert type(c) is C
