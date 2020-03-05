@@ -36,27 +36,12 @@ def test_andi():
     assert andi.inspect(func2) == {}
     assert andi.inspect(func3) == {'x': [Bar], 'y': [Foo]}
 
-    assert andi.to_provide(func1, possible) == {'x': Foo}
-    assert andi.to_provide(func2, possible) == {}
-    assert andi.to_provide(func3, possible) == {'x': Bar, 'y': Foo}
-
-    # incomplete data
-    assert andi.to_provide(func1, {Baz}) == {}
-    assert andi.to_provide(func2, {Baz}) == {}
-    assert andi.to_provide(func2, set()) == {}
-    assert andi.to_provide(func3, {Baz}) == {}
-
 
 def test_union():
     def func(x: Union[Foo, Bar]):
         pass
 
     assert andi.inspect(func) == {'x': [Foo, Bar]}
-
-    assert andi.to_provide(func, {Foo, Bar}) == {'x': Foo}
-    assert andi.to_provide(func, {Bar}) == {'x': Bar}
-    assert andi.to_provide(func, {Baz}) == {}
-    assert andi.to_provide(func, set()) == {}
 
 
 def test_optional():
@@ -65,25 +50,12 @@ def test_optional():
 
     assert andi.inspect(func) == {'x': [Foo, type(None)]}
 
-    assert andi.to_provide(func, {Foo, Bar}) == {'x': Foo}
-    assert andi.to_provide(func, {Foo, Bar, type(None)}) == {'x': Foo}
-    assert andi.to_provide(func, {Bar}) == {}
-    assert andi.to_provide(func, {Bar, type(None)}) == {'x': type(None)}
-
 
 def test_optional_union():
     def func(x: Optional[Union[Foo, Baz]]):
         pass
 
     assert andi.inspect(func) == {'x': [Foo, Baz, type(None)]}
-
-    assert andi.to_provide(func, {Foo, Bar}) == {'x': Foo}
-    assert andi.to_provide(func, {Baz, Foo, type(None)}) == {'x': Foo}
-    assert andi.to_provide(func, {Baz}) == {'x': Baz}
-    assert andi.to_provide(func, {Bar}) == {}
-    assert andi.to_provide(func, {Bar, type(None)}) == {'x': type(None)}
-    assert andi.to_provide(func, {}) == {}
-    assert andi.to_provide(func, {type(None)}) == {'x': type(None)}
 
 
 def test_not_annotated():
@@ -97,7 +69,6 @@ def test_string_types():
     def func(x: 'Bar'):
         pass
     assert andi.inspect(func) == {'x': [Bar]}
-    assert andi.to_provide(func, {Foo, Bar}) == {'x': Bar}
 
 
 def test_string_types_with_fn():
@@ -121,7 +92,6 @@ def test_init_methods():
             self.x = x
 
     assert andi.inspect(MyClass.__init__) == {'x': [Foo]}
-    assert andi.to_provide(MyClass.__init__, {Foo, Bar}) == {'x': Foo}
 
 
 def test_classmethod():
@@ -133,7 +103,6 @@ def test_classmethod():
             return cls()
 
     assert andi.inspect(MyClass.from_foo) == {'foo': [Foo]}
-    assert andi.to_provide(MyClass.from_foo, {Foo, Bar}) == {'foo': Foo}
 
 
 def test_decorated():

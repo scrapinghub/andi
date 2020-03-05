@@ -41,40 +41,6 @@ ContainerOrCallableType = Union[
 ]
 
 
-def to_provide(
-        arguments_or_func: Union[
-            Callable,
-            Dict[str, List[Optional[Type]]]
-        ],
-        is_injectable: ContainerOrCallableType
-        ) -> Dict[str, Optional[Type]]:
-    """
-    Return a dictionary ``{argument_name: type}`` with types which should
-    be provided.
-
-    ``arguments_or_func`` should be either a callable, or
-    a result of andi.inspect call for a callable.
-
-    ``is_injectable`` can be either a function which receives a type and
-    returns True if argument of such type can be provided, or a container
-    (e.g. a set) with supported types.
-    """
-    if callable(arguments_or_func):
-        arguments = inspect(arguments_or_func)
-    else:
-        arguments = arguments_or_func
-
-    is_injectable, externally_provided = _ensure_input_type_checks_as_func(
-        is_injectable, [])
-
-    result = {}
-    for argname, types in arguments.items():
-        sel_cls = _select_type(types, is_injectable, externally_provided)
-        if sel_cls:
-            result[argname] = sel_cls
-    return result
-
-
 PlanMapping = MutableMapping[Type, Dict[str, Type]]
 
 
