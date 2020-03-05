@@ -1,9 +1,9 @@
 from typing import Optional, Dict, Type, Any
 
-from andi import Plan
+from andi import PlanMapping
 
 
-def build(plan: Plan, instances_stock: Optional[Dict[Type, Any]] = None):
+def build(plan: PlanMapping, instances_stock: Optional[Dict[Type, Any]] = None):
     """ Build instances dictionary from a plan """
     instances_stock = instances_stock or {}
     instances = {}
