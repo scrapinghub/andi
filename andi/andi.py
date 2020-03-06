@@ -241,7 +241,7 @@ def _plan(class_or_func: Callable, *,
         plan_seq[class_or_func] = {}
         return plan_seq
 
-    if not is_injectable(class_or_func) and dependency_stack:
+    if dependency_stack and not is_injectable(class_or_func):
         raise NonProvidableError(
             "Type {} cannot be provided".format(class_or_func))
 
