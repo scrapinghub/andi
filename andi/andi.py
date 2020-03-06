@@ -41,60 +41,46 @@ ContainerOrCallableType = Union[
 ]
 
 
-PlanMapping = MutableMapping[Type, Dict[str, Type]]
+PlanList = List[Tuple[Callable, Dict[str, Callable]]]
 
 
-class Plan(PlanMapping):
+class Plan(PlanList):
     """
-    The plan resultant of executing the ``plan`` function.
-    It contains a sequence of tasks that should be executed in order because
-    they are dependency between them.
+    The resultant plan of executing the ``plan`` function.
+    It contains a sequence of steps that should be executed in order because
+    they are dependant among them.
+
+    The plan is itself a list of tuples of type
+    ``Tuple[Callable, Dict[str, Callable]]``
+    corresponding to
+    (callable_to_invoke, (param_name -> callable_to_build_the_param)).
     """
-
-    def __init__(self):
-        self._plan = OrderedDict()
-
-    def __getitem__(self, item):
-        return self._plan.__getitem__(item)
-
-    def __setitem__(self, key, value):
-        return self._plan.__setitem__(key, value)
-
-    def __delitem__(self, key):
-        return self._plan.__delitem__(key)
-
-    def __iter__(self):
-        return self._plan.__iter__()
-
-    def __len__(self):
-        return self._plan.__len__()
-
-    def __str__(self):
-        return self._plan.__str__()
-
-    def __repr__(self):
-        return self._plan.__repr__()
 
     @property
-    def dependencies(self) -> PlanMapping:
+    def dependencies(self) -> PlanList:
         """
-        The plan to build the dependencies of the last task of the plan.
-        Useful when it is known that the last task of the plan could be
-        incomplete, that is, not all dependencies for the last task could be
-        resolved. In such a case is convenient to execute the plan
-        for the dependencies and then have a custom task execution for the
-        last task of the plan where those dependencies not resolved are
+        The plan required to build the dependencies for the
+        ``plan`` input function/class only.
+        Useful when it is known that not all dependencies for input
+        function/class could be resolved. In such a case, it is convenient to
+        execute the plan for the dependencies and then
+        have a custom execution step for the
+        input function/class where those non-resolvable dependencies are
         provided by other means.
+
+        It is just the last item of the original plan ``self[:-1]``
         """
-        return OrderedDict(list(self.items())[:-1])
+        return self[:-1]
 
     @property
-    def final_arguments(self) -> Dict[str, Type]:
+    def final_arguments(self) -> Dict[str, Callable]:
         """
-         The argument names and its types for those arguments for
-         which it was possible to fulfil the dependencies.
+         The input function/class argument names and its builders for
+         those arguments for which it was possible to resolve the dependencies.
+
+         Equivalent to ``self[-1][1]``
         """
-        _, params = list(self.items())[-1]
+        _, params = self[-1]
         return params
 
 
@@ -102,26 +88,27 @@ def plan(class_or_func: Callable, *,
          is_injectable: ContainerOrCallableType,
          externally_provided: Optional[ContainerOrCallableType] = None,
          strict=False) -> Plan:
-    """ Plan the sequence of instantiation tasks required to fulfill the
+    """ Plan the sequence of instantiation steps required to fulfill the
     the arguments of the given function or the arguments of its
     constructor if a class is given instead. In other words, this function
     makes dependency injection easy. Type annotations are used
     to determine with instance must be built to satisfy the dependency.
 
-    The plan is a sequence encoded in a dict that preserves the order.
-    Each task in the plan contains:
+    The plan is a sequence steps.
+    Each step in the plan is a tuple with:
 
-    * A key, with the class/function that must be built/invoked in this task
-    * The value, with a dictionary with all the kwargs required for the
+    * A callable with the
+      class/function that must be built/invoked in this step
+    * A dictionary with all the kwargs required for the
       key build/invocation process. This dictionary has the argument names as keys
-      and classes/functions as values.
+      and classes/functions required to build them as values.
 
     The best way to understand a plan is to see how a typical building
     function would use it to build the instances::
 
         def build(plan):  # Build all the instances from a plan
             instances = {}
-            for fn_or_cls, args in plan.items():
+            for fn_or_cls, args in plan:
                 kwargs = {arg: instances[arg_cls]
                           for arg, arg_cls in args.items()}
                 instances[fn_or_cls] = fn_or_cls(**kwargs)
@@ -137,7 +124,8 @@ def plan(class_or_func: Callable, *,
     for the input class/function can be resolved. When ``strict`` is False, this
     function provides the plan only for those arguments that could be resolved.
 
-    In other words, the last task in the plan could be incomplete when
+    In other words, the step for the input function/class
+    (which always corresponds with the last step) could be incomplete when
     ``strict=False`` (for example, when some arguments are not annotated
     because they will be provided by other means).
     In such a cases the above proposed ``build`` function won't work.
@@ -181,15 +169,15 @@ def plan(class_or_func: Callable, *,
     ...
     >>> def build(plan):  # Build all the instances from a plan
     ...     instances = {}
-    ...     for fn_or_cls, args in plan.items():
+    ...     for fn_or_cls, args in plan:
     ...         instances[fn_or_cls] = fn_or_cls(**_get_kwargs(instances, args))
     ...     return instances
     ...
-    >>> plan_tasks = plan(fn, is_injectable={A, B})
-    >>> instances = build(plan_tasks.dependencies)
+    >>> plan_steps = plan(fn, is_injectable={A, B})
+    >>> instances = build(plan_steps.dependencies)
     >>> # Finally invoking the function with all the dependencies resolved
     >>> fn(non_annotated='non_annotated',
-    ...    **_get_kwargs(instances, plan_tasks.final_arguments))
+    ...    **_get_kwargs(instances, plan_steps.final_arguments))
     'Called with a, b, non_annotated'
 
     The returned plan when ``strict=True`` is given can be directly built. See
@@ -199,8 +187,8 @@ def plan(class_or_func: Callable, *,
     ...         self.a = a
     ...         self.b = b
     ...
-    >>> plan_tasks = plan(C, is_injectable={A, B, C}, strict=True)
-    >>> instances = build(plan_tasks)
+    >>> plan_steps = plan(C, is_injectable={A, B, C}, strict=True)
+    >>> instances = build(plan_steps)
     >>> c = instances[C]  # Instance of C class with all dependencies resolved
     >>> assert type(c) is C
     >>> assert c.a is instances[A]
@@ -230,21 +218,23 @@ def plan(class_or_func: Callable, *,
     is_injectable = _ensure_can_provide_func(is_injectable)
     externally_provided = _ensure_can_provide_func(externally_provided)
 
-    plan = _plan(class_or_func,
+    plan_odict = _plan(class_or_func,
                  is_injectable=is_injectable,
                  externally_provided=externally_provided,
                  strict=strict,
                  dependency_stack=None)
-    return plan
+    return Plan(plan_odict.items())
 
+
+_PlanDict = MutableMapping[Callable, Dict[str, Callable]]
 
 def _plan(class_or_func: Callable, *,
           is_injectable: Callable[[Callable], bool],
           externally_provided: Callable[[Callable], bool],
           strict,
-          dependency_stack=None) -> Plan:
+          dependency_stack=None) -> _PlanDict:
     dependency_stack = dependency_stack or []
-    plan_seq = Plan()
+    plan_seq  = OrderedDict()  # type: _PlanDict
     type_for_arg = {}
 
     if externally_provided(class_or_func):

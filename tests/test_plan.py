@@ -4,7 +4,7 @@ import pytest
 
 import andi
 from tests.utils import build
-
+from collections import OrderedDict as OD
 
 class A:
 
@@ -42,9 +42,9 @@ def test_plan_and_build():
     plan = andi.plan(E, is_injectable=lambda x: True,
                      externally_provided={A})
 
-    assert set(list(plan.keys())[:2]) == {A, B}
-    assert list(plan.values())[:2] == [{}, {}]
-    assert list(plan.items())[2:] == [
+    assert dict(plan[:2]).keys() == {A, B}
+    assert list(dict(plan[:2]).values()) == [{}, {}]
+    assert plan[2:] == [
         (C, {'a': A, 'b': B}),
         (D, {'a': A, 'c': C}),
         (E, {'b': B, 'c': C, 'd': D})
@@ -76,7 +76,7 @@ def test_plan_similar_for_class_or_func(cls, is_injectable, externally_provided)
     plan_func = andi.plan(cls.__init__, is_injectable=is_injectable,
                           externally_provided=externally_provided)
 
-    plan_func[cls] = plan_func.pop(cls.__init__)  # To make plans compatible
+    plan_func[-1] = (cls, plan_func[-1][1])  # To make plans compatible
     assert plan_cls == plan_func
 
     instances = build(plan_cls, external_deps)
@@ -92,10 +92,10 @@ def test_cannot_be_provided():
             pass
 
     plan = andi.plan(WithC, is_injectable={B, C}, externally_provided={A})
-    assert plan == {A: {}, B: {}, C: {'a': A, 'b': B}, WithC: {'c': C}}
+    assert dict(plan) == {A: {}, B: {}, C: {'a': A, 'b': B}, WithC: {'c': C}}
 
     # partial plan also allowed (C is not required to be injectable):
-    plan = andi.plan(WithC, is_injectable={B}, externally_provided={A})
+    andi.plan(WithC, is_injectable={B}, externally_provided={A})
 
     # But should fail on strict regimen
     with pytest.raises(andi.NonProvidableError):
@@ -112,18 +112,17 @@ def test_cannot_be_provided():
         def __init__(self, a_or_b: Union[A, B]):
             pass
 
-    plan = list(andi.plan(WithOptionals,
-                          is_injectable={WithOptionals, A, B},
-                          externally_provided={A}).items())
+    plan = andi.plan(WithOptionals,
+                     is_injectable={WithOptionals, A, B},
+                     externally_provided={A})
     assert plan == [(A, {}), (WithOptionals, {'a_or_b': A})]
 
-    plan = list(andi.plan(WithOptionals,
-                          is_injectable={WithOptionals, B},
-                          externally_provided={A}).items())
+    plan = andi.plan(WithOptionals,
+                     is_injectable={WithOptionals, B},
+                     externally_provided={A})
     assert plan == [(A, {}), (WithOptionals, {'a_or_b': A})]
 
-    plan = list(andi.plan(WithOptionals,
-                          is_injectable={WithOptionals, B}).items())
+    plan = andi.plan(WithOptionals, is_injectable={WithOptionals, B})
     assert plan == [(B, {}), (WithOptionals, {'a_or_b': B})]
 
     with pytest.raises(andi.NonProvidableError):
@@ -133,36 +132,38 @@ def test_cannot_be_provided():
 def test_externally_provided():
     plan = andi.plan(E.__init__, is_injectable=ALL,
                      externally_provided=ALL)
-    assert plan.dependencies == {B: {}, C: {}, D: {}}
+    assert dict(plan.dependencies) == {B: {}, C: {}, D: {}}
     assert plan.final_arguments == {'b': B, 'c': C, 'd': D}
 
     plan = andi.plan(E.__init__, is_injectable=[],
                      externally_provided=ALL)
-    assert plan.dependencies == {B: {}, C: {}, D: {}}
+    assert dict(plan.dependencies) == {B: {}, C: {}, D: {}}
     assert plan.final_arguments == {'b': B, 'c': C, 'd': D}
 
     plan = andi.plan(E, is_injectable=ALL, externally_provided=ALL)
-    assert plan == {E: {}}
+    assert plan == [(E, {})]
     assert plan.final_arguments == {}
-    assert plan.dependencies == {}
+    assert plan.dependencies == []
 
     plan = andi.plan(E, is_injectable=ALL,
                      externally_provided={A, B, C, D})
-    assert plan.keys() == {B, C, D, E}
-    assert list(plan.keys())[-1] == E
-    assert plan[E] == {'b': B, 'c': C, 'd': D}
+    assert dict(plan).keys() == {B, C, D, E}
+    assert plan[-1][0] == E
+    assert plan.final_arguments == {'b': B, 'c': C, 'd': D}
+    assert plan.final_arguments == plan[-1][1]
 
     plan = andi.plan(E, is_injectable=ALL,
                      externally_provided={A, B, D})
-    seq = list(plan.keys())
+    plan_od = OD(plan)
+    seq = list(plan_od.keys())
     assert seq.index(A) < seq.index(C)
     assert seq.index(B) < seq.index(C)
     assert seq.index(D) < seq.index(E)
     assert seq.index(C) < seq.index(E)
     for cls in (A, B, D):
-        assert plan[cls] == {}
-    assert plan[C] == {'a': A, 'b': B}
-    assert plan[E] == {'b': B, 'c': C, 'd': D}
+        assert plan_od[cls] == {}
+    assert plan_od[C] == {'a': A, 'b': B}
+    assert plan_od[E] == {'b': B, 'c': C, 'd': D}
 
 
 def test_plan_for_func():
@@ -195,10 +196,10 @@ def test_plan_with_optionals():
 
     plan = andi.plan(fn, is_injectable={type(None), str},
                      externally_provided={str})
-    assert plan ==  {str: {}, fn: {'a': str}}
+    assert plan ==  [(str, {}), (fn, {'a': str})]
 
     plan = andi.plan(fn, is_injectable={type(None)})
-    assert plan.dependencies == {type(None): {}}
+    assert plan.dependencies == [(type(None), {})]
     assert plan.final_arguments == {'a': type(None)}
 
     instances = build(plan)
@@ -219,7 +220,7 @@ def test_plan_non_annotated_args():
         externally_provided={A}
     )
 
-    assert plan.dependencies == {A: {}, B: {}}
+    assert dict(plan.dependencies) == {A: {}, B: {}}
     assert plan.final_arguments == {'a': A, 'b': B}
 
     plan_class = andi.plan(WithNonAnnArgs,
@@ -249,7 +250,7 @@ def test_plan_no_args(strict):
 
     plan = andi.plan(fn, is_injectable=[],
                      strict=strict)
-    assert plan == {fn: {}}
+    assert plan == [(fn, {})]
     instances = build(plan)
     assert instances[fn]
     assert fn(

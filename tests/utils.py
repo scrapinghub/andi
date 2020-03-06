@@ -1,13 +1,13 @@
-from typing import Optional, Dict, Type, Any
+from typing import Optional, Dict, Any, Callable
 
-from andi import PlanMapping
+from andi import PlanList
 
 
-def build(plan: PlanMapping, instances_stock: Optional[Dict[Type, Any]] = None):
+def build(plan: PlanList, instances_stock: Optional[Dict[Callable, Any]] = None):
     """ Build instances dictionary from a plan """
     instances_stock = instances_stock or {}
     instances = {}
-    for cls, params in plan.items():
+    for cls, params in plan:
         if cls in instances_stock:
             instances[cls] = instances_stock[cls]
         else:
