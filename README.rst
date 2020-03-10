@@ -77,7 +77,7 @@ valves. These are the car dependencies and sub-dependencies.
 
 The question is, could we have an automatic way of building instances?
 For example, could we have a ``build`` function that
-given the ``Car`` class or any other class it would return an instance
+given the ``Car`` class or any other class would return an instance
 even if the class itself has some other dependencies?
 
 .. code-block:: python
@@ -125,7 +125,8 @@ The classes for ``Car`` should then be rewritten as:
             self.wheels = wheels
 
 Note how now there is a explicit annotation stating that the
-``valves`` argument is of type ``Valves`` among other annotations.
+``valves`` argument is of type ``Valves``
+(same for ``engine`` and ``wheels``).
 
 The ``andi.plan`` function can now create a plan to build the
 ``Car`` class (ignore the ``is_injectable`` parameter by now):
