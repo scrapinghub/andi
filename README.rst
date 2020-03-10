@@ -349,9 +349,64 @@ Now we are ready to create ``UserDAO`` instances with ``andi``:
 Note that being injectable is not required for externally provided
 dependencies.
 
-Optional and Union
-------------------
+Optional
+--------
 
+``Optional`` type annotations can be used in case of
+dependencies that can be optional. For example:
+
+.. code-block:: python
+
+    @dataclass
+    class Dashboard:
+        conn: Optional[DBConnection]
+
+        def showPage():
+            if self.conn:
+                self.conn.query("INSERT INTO VISITS ...")
+            ...  # renders a HTML page
+
+In this example, the ``Dashboard`` class generates a HTML page to be served, and
+also stores the number of visits into a database. Database
+could be absent in some environments, but you might want
+the dashboard to work even if it cannot log the visits.
+
+So the plan when a database connection is possible would be:
+
+.. code-block:: python
+
+    plan = andi.plan(UsersDAO, is_injectable=is_injectable,
+                     externally_provided={DBConnection}, strict=True)
+
+
+And the following when the connection is absent:
+
+.. code-block:: python
+
+    plan = andi.plan(UsersDAO, is_injectable=is_injectable,
+                     externally_provided={}, strict=True)
+
+It is also required to register the type of ``None``
+as injectable. Otherwise ``andi.plan`` with raise an exception
+saying that "NoneType is not injectable".
+
+.. code-block:: python
+
+    Injectable.register(type(None))
+
+Union
+-----
+
+``Union`` can also be used to express alternatives. For example:
+
+.. code-block:: python
+
+    @dataclass
+    class UsersDAO:
+        conn: Union[ProductionDBConnection, DevelopmentDBConnection]
+
+``DevelopmentDBConnection`` will be injected in the absence of
+``ProductionDBConnection``.
 
 
 Strict mode
@@ -371,11 +426,6 @@ where fulfilled and otherwise fail. Such is the case for classes.
 So it is recommended to set ``strict=True`` when invoking
 ``andi.plan`` for classes.
 
-
-
-
-Cyclical dependencies
----------------------
 
 ------
 
