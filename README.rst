@@ -39,7 +39,7 @@ Installation
 
 andi requires Python >= 3.5.3.
 
-Idea
+Goal
 ====
 
 See the following classes that represents parts of a car
