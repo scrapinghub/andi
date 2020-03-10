@@ -376,7 +376,7 @@ So the plan when a database connection is possible would be:
 .. code-block:: python
 
     plan = andi.plan(UsersDAO, is_injectable=is_injectable,
-                     externally_provided={DBConnection}, strict=True)
+                     externally_provided={DBConnection})
 
 
 And the following when the connection is absent:
@@ -384,7 +384,7 @@ And the following when the connection is absent:
 .. code-block:: python
 
     plan = andi.plan(UsersDAO, is_injectable=is_injectable,
-                     externally_provided={}, strict=True)
+                     externally_provided={})
 
 It is also required to register the type of ``None``
 as injectable. Otherwise ``andi.plan`` with raise an exception
@@ -414,243 +414,18 @@ Strict mode
 
 By default ``andi.plan`` won't fail if it is not able to provide
 some of the direct dependencies for the given input (see the
-``speed`` argument in the example above).
+``speed`` argument in one of the examples above).
 
 This behaviour is desired when inspecting functions
-for which is already known that some arguments will be non
-injectables but they will be provided by other means
+for which is already known that some arguments won't be
+injectable but they will be provided by other means
 (like the ``drive`` function above).
 
 But in other cases is better to be sure that all dependencies
-where fulfilled and otherwise fail. Such is the case for classes.
+are fulfilled and otherwise fail. Such is the case for classes.
 So it is recommended to set ``strict=True`` when invoking
 ``andi.plan`` for classes.
 
-
-------
-
-
-``andi`` does a simple thing, but it requires some explanation why
-this thing is useful.
-
-You're building a framework. This framework has code which calls some
-user-defined function (callback). Callback receives arguments
-``foo`` and ``bar``:
-
-.. code-block:: python
-
-    def my_framework(callback):
-        # ... compute foo and bar somehow
-        result = callback(foo=foo, bar=bar)
-        # ...
-
-Then you decide that you want the framework to be flexible,
-and support callbacks which take
-
-* both ``foo`` and ``bar``,
-* only ``foo``,
-* only ``bar``,
-* nothing.
-
-If a callback only takes ``foo``, it may be unnecessary to compute ``bar``.
-
-In addition to that, you realize that there can be environments
-or implementations where ``foo`` is available for the framework,
-but ``bar`` isn't, but you still want to reuse the callbacks which
-work without ``bar``, and disable (or error) those who need ``bar``.
-
-So, the logic is the following:
-
-1. Framework defines which inputs are available, or can be possibly computed
-   (e.g. ``foo`` and ``bar``).
-2. Callback declares which inputs it receives (e.g. ``bar``).
-3. Framework inspects the callback, finds arguments the callback needs.
-4. Optional: if there are some arguments which callback needs,
-   but framework doesn't provide, an error is raised (or callback is disabled).
-5. Framework computes argument values (``bar`` in this case).
-6. Framework calls the callback.
-
-Depending on implementation, steps 1-5 may happen iteratively - e.g.
-middlewares may be populating different parts of callback kwargs.
-In this case step (4 - raising an error) can be skipped.
-
-``andi`` is a library which helps to support this workflow.
-
-Usage
-=====
-
-``andi`` usage looks like this:
-
-.. code-block:: python
-
-    import andi
-
-    class Foo:
-        pass
-
-    class Bar:
-        pass
-
-    class Baz:
-        pass
-
-
-    # use type annotations to declare which inputs a callback wants
-    def my_callback1(foo: Foo):
-        pass
-
-
-    def my_callback2(bar: Bar, foo: Foo):
-        pass
-
-
-    def my_framework(callback):
-        kwargs_to_provide = andi.to_provide(callback,
-                                            can_provide={Foo, Bar, None})
-        # for my_callback: kwargs_to_provide == {'foo': Foo}
-
-        # Create all the dependencies - implementation is framework-specific,
-        # and can be organized in different ways. Code below is an example.
-        kwargs = {}
-        for name, cls in kwargs_to_provide.items():
-            if cls is Foo:
-                kwargs[name] = Foo()
-            elif cls is Bar:
-                kwargs[name] = fetch_bar()
-            elif cls is None:
-                kwargs[name] = None
-            else:
-                raise Exception("Unexpected type")  # shouldn't really happen
-
-        # everything is ready, call the callback
-        result = callback(**kwargs)
-        # ...
-
-    my_framework(my_callback1)  # Foo instance is passed to my_callback1
-    my_framework(my_callback2)  # Bar and Foo instances are passed to my_callback2
-
-
-If a callback wants some input which framework can't provide,
-then some arguments are going to be  missing in kwargs,
-and Python can raise TypeError, as usual.
-It is possible to check it explicitly, to avoid doing unnecessary
-work creating values for other arguments:
-
-.. code-block:: python
-
-    arguments = andi.inspect(callable)
-    kwargs_to_provide = andi.to_provide(arguments,
-                                        can_provide={Foo, Bar, None})
-    cant_provide = arguments.keys() - kwargs_to_provide.keys()
-    if cant_provide:
-        raise Exception("Can't provide arguments: %s" % cant_provide)
-
-
-``andi`` support typing.Union. If an argument is annotated
-as ``Union[Foo, Bar]``, it means "both Foo and Bar objects are fine,
-but callable prefers Foo":
-
-.. code-block:: python
-
-    def callback4(x: Union[Baz, Bar, Foo]):
-        pass
-
-    # Bar is preferred to Foo, and Baz is not available, so my_framework passes
-    # Bar instance to ``x`` argument (``x = fetch_bar()``)
-    my_framework(callback4)
-
-``andi`` also supports typing.Optional types. If an argument is annotated
-as optional, it means ``Union[<other types>, None]``. So usually framework
-specifies that None is OK, and provides it; None has the least priority:
-
-.. code-block:: python
-
-    def callback4(foo: Optional[Foo], baz: Optional[Baz]):
-        pass
-
-    # foo=Foo(), baz=None is passed, because my_framework
-    # supports Foo, but not Baz
-    my_framework(callback4)
-
-``andi`` only checks type-annotated arguments; arguments without annotations
-are ignored.
-
-Constructor Dependency Injection
---------------------------------
-
-It is common for frameworks to ask users to define classes with a certain
-interface, not just callbacks. ``andi`` can be used like this:
-
-.. code-block:: python
-
-    class UserClass:
-        def __init__(self, foo: Foo):
-            self.foo = foo
-        # ...
-
-    class MyFramework:
-        # ...
-        def create_instance(self, user_cls):
-            kwargs_to_provide = andi.to_provide(user_cls.__init__,
-                                                can_provide={Foo, Bar})
-            # ... fill kwargs, based on ``kwargs_to_provide``
-            return user_cls(**kwargs)
-
-    obj = framework.create_instance(UserClass)
-
-Pattern is the following:
-
-1) ask user classes to declare all dependencies in ``__init__`` method,
-2) then framework creates instances of these classes, passing all the
-   required dependencies.
-
-Instead of ``__init__`` you can also use a classmethod.
-
-Recursive dependencies
-----------------------
-
-``andi`` can be used on different levels in a framework. For example,
-framework supports callbacks which receive instances of
-some BaseClass subclasses:
-
-.. code-block:: python
-
-    class UserClass(framework.BaseClass):
-        def __init__(self, foo: Foo):
-            self.foo = foo
-
-    def callback(user: UserClass):
-        # ...
-
-    class MyFramework:
-        # ...
-        def create_instance(self, user_cls):
-            kwargs_to_provide = andi.to_provide(user_cls.__init__,
-                                                can_provide={Foo, Bar})
-            # ... fill kwargs, based on ``kwargs_to_provide``, i.e.
-            # create Foo and Bar objects somehow
-            return user_cls(**kwargs)
-
-        def call_callback(self, callback):
-            kwargs_to_provide = andi.to_provide(
-                callback,
-                can_provide=self.is_allowed_callback_argument
-            )
-            kwargs = {}
-            for name, user_cls in kwargs_to_provide.items():
-                kwargs[name] = self.create_instance(user_cls)
-            return callback(**kwargs)
-
-        def is_allowed_callback_argument(self, cls):
-            return issubclass(cls, framework.BaseClass)
-
-In this example callback needs a dependency (UserClass object), and UserClass
-object on itself has a dependency (Foo). So ``andi`` is used to find out these
-dependencies, and then framework creates Foo object first, then
-UserClass object, and then finally calls the callback.
-
-Implementation can be recursive as well, e.g. Foo may need some dependencies
-as well.
 
 Why type annotations?
 ---------------------
@@ -695,18 +470,6 @@ and for html:
         # ...
 
 This is more boilerplate though.
-
-You can also refactor ``parse`` to have a single argument:
-
-.. code-block:: python
-
-    @dataclass
-    class Response:
-        url: str
-        html: str
-
-    def parse(response: Response):
-        # ...
 
 Why doesn't andi handle creation of objects?
 --------------------------------------------
