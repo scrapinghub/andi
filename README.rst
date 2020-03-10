@@ -95,7 +95,6 @@ This is how this plan for the ``Car`` class would looks like:
 4. Invoke ``Cars`` with the instance created in 2 as the ``engine`` argument and with
    the instance created in 3 as the ``wheels`` argument
 
-
 Type annotations
 ----------------
 
@@ -179,12 +178,12 @@ is_injectable
 -------------
 
 It is not always desired for ``andi`` to manage every single annotation found.
-Instead usually is better to explicitly declare which types
+Instead is usually better to explicitly declare which types
 can be handled by ``andi``. The argument ``is_injectable``
 allows to customize this feature.
 
-``andi`` will raise an error if a dependency that cannot be resolved
-because it is not injectable is found.
+``andi`` will raise an error on the presence of a dependency that cannot be resolved
+because it is not injectable.
 
 Usually is desirable to declare injectabilty by
 creating a base class to inherit from. For example,
@@ -206,13 +205,12 @@ class for the car components:
     class Wheels(Injectable):
         pass
 
-So that the call to ``andi.plan`` would change to:
+The call to ``andi.plan`` would then be:
 
 .. code-block:: python
 
     is_injectable = lambda cls: issubclass(cls, Injectable)
     plan = andi.plan(Car, is_injectable=is_injectable)
-
 
 Functions and methods
 ---------------------
@@ -249,13 +247,12 @@ by default. Otherwise, an exception would have been raised (see ``strict``
 documentation for more information).
 
 An alternative and more generic way to invoke the drive function
-would have been:
+would be:
 
 .. code-block:: python
 
-    drive(speed='non_annotated',
+    drive(speed=100,
           **_get_kwargs(instances, plan.final_arguments))
-
 
 dataclasses and attrs
 ---------------------
@@ -278,7 +275,7 @@ For example the ``Car`` class could have been defined as:
         engine: Engine
         wheels: Wheels
 
-Using attrs or dataclass is handy because they avoid
+Using ``attrs`` or ``dataclass`` is handy because they avoid
 some boilerplate.
 
 Externally provided dependencies
@@ -371,7 +368,7 @@ also stores the number of visits into a database. Database
 could be absent in some environments, but you might want
 the dashboard to work even if it cannot log the visits.
 
-So the plan when a database connection is possible would be:
+When a database connection is possible the plan call would be:
 
 .. code-block:: python
 
@@ -408,7 +405,6 @@ Union
 ``DevelopmentDBConnection`` will be injected in the absence of
 ``ProductionDBConnection``.
 
-
 Strict mode
 -----------
 
@@ -425,7 +421,6 @@ But in other cases is better to be sure that all dependencies
 are fulfilled and otherwise fail. Such is the case for classes.
 So it is recommended to set ``strict=True`` when invoking
 ``andi.plan`` for classes.
-
 
 Why type annotations?
 ---------------------
