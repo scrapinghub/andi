@@ -143,8 +143,8 @@ This is what the ``plan`` variable contains:
     [(Valves, {}),
      (Engine, {'valves': Valves}),
      (Wheels, {}),
-     (Car, {'engine': Engine,
-            'wheels': Wheels})]
+     (Car,    {'engine': Engine,
+               'wheels': Wheels})]
 
 Note how this plan correspond exactly to the 4-steps plan described
 in the previous section.
@@ -184,7 +184,7 @@ can be handled by ``andi``. The argument ``is_injectable``
 allows to customize this feature.
 
 ``andi`` will raise an error if a dependency that cannot be resolved
-because a not injectable dependency is found.
+because it is not injectable is found.
 
 Usually is desirable to declare injectabilty by
 creating a base class to inherit from. For example,
@@ -274,7 +274,7 @@ For example the ``Car`` class could have been defined as:
 
     # dataclass example
     @dataclass
-    class Car:
+    class Car(Injectable):
         engine: Engine
         wheels: Wheels
 
@@ -287,14 +287,95 @@ Externally provided dependencies
 Retaining the control over object instantiation
 could be desired in some cases. For example creating
 a database connection could require accessing some
-credentials registry and you might want to control building
+credentials registry or getting the connection from a pool
+so you might want to control building
 such instances outside of the regular
 dependency injection mechanism.
 
 ``andi.plan`` allows to specify which types would be
 externally provided. Let's see an example:
 
+.. code-block:: python
 
+    class DBConnection(ABC):
+
+        @abstractmethod
+        def getConn():
+            pass
+
+    @dataclass
+    class UsersDAO:
+        conn: DBConnection
+
+        def getUsers():
+           return self.conn.query("SELECT * FROM USERS")
+
+``UsersDAO`` requires a database connection to run queries.
+But the connection will be provided externally from a pool, so we
+call then ``andi.plan`` using also the ``externally_provided``
+parameter:
+
+.. code-block:: python
+
+    plan = andi.plan(UsersDAO, is_injectable=is_injectable,
+                     externally_provided={DBConnection})
+
+The build method should then be modified slightly to be able
+to inject externally provided instances:
+
+.. code-block:: python
+
+    def build(plan, instances_stock=None):
+        instances_stock = instances_stock or {}
+        instances = {}
+        for fn_or_cls, args in plan:
+            if fn_or_cls in instances_stock:
+                instances[fn_or_cls] = instances_stock[fn_or_cls]
+            else:
+                instances[fn_or_cls] = fn_or_cls(**_get_kwargs(instances, args))
+        return instances
+
+Now we are ready to create ``UserDAO`` instances with ``andi``:
+
+.. code-block:: python
+
+    plan = andi.plan(UsersDAO, is_injectable=is_injectable,
+                     externally_provided={DBConnection})
+    dbconnection = DBPool.get_connection()
+    instances = build(plan.dependencies, {DBConnection: dbconnection})
+    users_dao = instances[UsersDAO]
+    users = user_dao.getUsers()
+
+Note that being injectable is not required for externally provided
+dependencies.
+
+Optional and Union
+------------------
+
+
+
+Strict mode
+-----------
+
+By default ``andi.plan`` won't fail if it is not able to provide
+some of the direct dependencies for the given input (see the
+``speed`` argument in the example above).
+
+This behaviour is desired when inspecting functions
+for which is already known that some arguments will be non
+injectables but they will be provided by other means
+(like the ``drive`` function above).
+
+But in other cases is better to be sure that all dependencies
+where fulfilled and otherwise fail. Such is the case for classes.
+So it is recommended to set ``strict=True`` when invoking
+``andi.plan`` for classes.
+
+
+
+
+Cyclical dependencies
+---------------------
 
 ------
 
