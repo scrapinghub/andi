@@ -236,7 +236,7 @@ def _plan(class_or_func: Callable, *,
           strict,
           dependency_stack=None) -> _PlanDict:
     dependency_stack = dependency_stack or []
-    plan_seq  = OrderedDict()  # type: _PlanDict
+    plan_seq = OrderedDict()  # type: _PlanDict
     type_for_arg = {}
 
     if externally_provided(class_or_func):
