@@ -485,6 +485,159 @@ It is hard to design API with enough flexibility for all such use cases.
 That said, ``andi`` may provide more helpers in future,
 once patterns emerge, even if they're useful only in certain contexts.
 
+Examples: callback based framework
+---------------------------------
+
+Spider example
+**************
+
+Nothing better than a example to understand how ``andi`` can be useful.
+Let's imagine you want to implemented a callback based framework
+for writing spiders to crawl web pages.
+
+The basic idea is that there is framework in which the user
+can write spiders. Each spider is a collection of callbacks
+that can process data from a page, emit data or request new
+pages. Then, there is an engine that takes care of downloading
+the web pages
+and invoking the user defined callbacks, chaining requests
+with its corresponding callback.
+
+Let's see an example of an spider to download recipes
+from a cooking page:
+
+.. code-block:: python
+
+    class MySpider(Spider):
+        start_url = "htttp://a_page_with_a_list_of_recipes"
+
+        def parse(self, response):
+            for url in recipes_urls_from_page(response)
+                yield Request(url, callback=parse_recipe)
+
+        def parse_recipe(self, response):
+            yield extract_recipe(response)
+
+
+It would be handy if the user can define some requirements
+just as annotated parameters of the callbacks. And ``andi`` make is
+possible.
+
+For example, a particular callback could require access to the cookies:
+
+.. code-block:: python
+
+    def parse(self, response: Response, cookies: CookieJar):
+        # ... Do something with the response and the cookies
+
+In this case, the engine can use ``andi`` to inspect the ``parse`` method, and
+detect that ``Response`` and ``CookieJar`` are required.
+Then the framework will build them and will invoke the callback.
+
+This functionality would serve to inject into the users callbacks
+some components only when they are required.
+
+It could also serve to encapsulate better the user code. For
+example, we could just decouple the recipe extraction into
+it's own class:
+
+.. code-block:: python
+
+    @dataclass
+    class RecipeExtractor:
+        response: Response
+
+        def to_item():
+            return extract_recipe(self.response)
+
+The callback could be defined as:
+
+.. code-block:: python
+
+        def parse_recipe(extractor: RecipeExtractor):
+            yield extractor.to_item()
+
+Note how handy is that with ``andi`` the engine can create
+an instance of ``RecipesExtractor`` feeding it with the
+declared ``Response`` dependency.
+
+In definitive, using ``andi`` in such a framework
+can provide great flexibility to the user
+and reduce boilerplate.
+
+Web server example
+******************
+
+That can be useful also for implementing a new
+web framework.
+
+Let's imagine you can declare your sever in a
+class:
+
+.. code-block:: python
+
+    class MyWeb(Server):
+
+        @route("/products")
+        def productspage(self, request: Request):
+            # return the composed page
+
+        @route("/sales")
+        def salespage(self, request: Request):
+            # return the composed page
+
+The former case is composed of two endpoints, one for serving
+a page with a summary of sales, and a second one to serve
+the products.
+
+Connection to the database can be required
+to sever these pages. This logic could be encapsulated
+in some classes:
+
+.. code-block:: python
+
+    @dataclass
+    class Products:
+        conn: DBConnection
+
+        def get_products()
+            return self.conn.query("SELECT ...")
+
+    @dataclass
+    class Sales:
+        conn: DBConnection
+
+        def get_sales()
+            return self.conn.query("SELECT ...")
+
+Now ``productspage`` and ``salespage`` methods can just declare
+that they require these objects:
+
+.. code-block:: python
+
+    class MyWeb(Server):
+
+        @route("/products")
+        def productspage(self, request: Request, products: Products):
+            # return the composed page
+
+        @route("/sales")
+        def salespage(self, request: Request, sales: Sales):
+            # return the composed page
+
+And the framework can then be responsible to fulfill these
+dependencies. The flexibility offered would be a great advantage.
+As an example, if would be very easy to create a page that requires
+both sales and products:
+
+.. code-block:: python
+
+        @route("/overview")
+        def productspage(self, request: Request,
+                         products: Products, sales: Sales):
+            # return the composed overview page
+
+
 Contributing
 ============
 
