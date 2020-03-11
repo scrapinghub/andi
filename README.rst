@@ -485,8 +485,8 @@ It is hard to design API with enough flexibility for all such use cases.
 That said, ``andi`` may provide more helpers in future,
 once patterns emerge, even if they're useful only in certain contexts.
 
-Examples: callback based framework
----------------------------------
+Examples: callback based frameworks
+-----------------------------------
 
 Spider example
 **************
