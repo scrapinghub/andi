@@ -43,10 +43,10 @@ ContainerOrCallableType = Union[
 ]
 
 
-PlanList = List[Tuple[Callable, Dict[str, Callable]]]
+PlanStepList = List[Tuple[Callable, Dict[str, Callable]]]
 
 
-class Plan(PlanList):
+class Plan(PlanStepList):
     """
     The resultant plan of executing the ``plan`` function.
     It contains a sequence of steps that should be executed in order because
@@ -59,7 +59,7 @@ class Plan(PlanList):
     """
 
     @property
-    def dependencies(self) -> PlanList:
+    def dependencies(self) -> PlanStepList:
         """
         The plan required to build the dependencies for the
         ``plan`` input function/class only.
