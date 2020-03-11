@@ -70,7 +70,7 @@ class Plan(PlanList):
         input function/class where those non-resolvable dependencies are
         provided by other means.
 
-        It is just the last item of the original plan ``self[:-1]``
+        ``plan.dependencies`` is the ``plan`` without the last item ``plan[:-1]``
         """
         return self[:-1]
 
