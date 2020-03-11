@@ -77,10 +77,10 @@ class Plan(PlanList):
     @property
     def final_arguments(self) -> Dict[str, Callable]:
         """
-         The input function/class argument names and its builders for
-         those arguments for which it was possible to resolve the dependencies.
+        The input function/class argument names and its builders for
+        those arguments for which it was possible to resolve the dependencies.
 
-         Equivalent to ``self[-1][1]``
+        Equivalent to ``self[-1][1]``
         """
         _, params = self[-1]
         return params
