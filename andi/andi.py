@@ -30,8 +30,10 @@ def inspect(func: Callable) -> Dict[str, List[Optional[Type]]]:
     for key, tp in annotations.items():
         if is_union(tp):
             res[key] = get_union_args(tp)
+        elif tp is None:
+            res[key] = []
         else:
-            res[key] = [] if tp is None else [tp]
+            res[key] = [tp]
     return res
 
 
