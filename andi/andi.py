@@ -89,7 +89,7 @@ class Plan(PlanStepList):
 def plan(class_or_func: Callable, *,
          is_injectable: ContainerOrCallableType,
          externally_provided: Optional[ContainerOrCallableType] = None,
-         strict=False) -> Plan:
+         full_final_arguments=False) -> Plan:
     """ Plan the sequence of instantiation steps required to fulfill the
     the arguments of the given function or the arguments of its
     constructor if a class is given instead. In other words, this function
@@ -121,14 +121,16 @@ def plan(class_or_func: Callable, *,
     dependencies of the dependencies. In other words, the plan function
     is able to plan the whole tree of dependencies.
 
-    If the argument ``strict`` is True then this function will fail
+    If the argument ``full_final_arguments`` is True then this function will fail
     with ``NonProvidableError`` if not all the required arguments
-    for the input class/function can be resolved. When ``strict`` is False, this
+    for the input class/function can be resolved. When
+    ``full_final_arguments`` is False, this
     function provides the plan only for those arguments that could be resolved.
 
     In other words, the step for the input function/class
     (which always corresponds with the last step) could be incomplete when
-    ``strict=False`` (for example, when some arguments are not annotated
+    ``full_final_arguments=False`` (for example, when some
+    arguments are not annotated
     because they will be provided by other means).
     In such a cases the above proposed ``build`` function won't work.
 
@@ -147,7 +149,8 @@ def plan(class_or_func: Callable, *,
     Any type found in the dependency tree that is injectable can as well
     has its own dependencies. If the planner fails to fulfill the dependencies 
     of any injectable found in the tree, ``NonProvidableError`` is raised, 
-    regardless of a value of ``strict`` argument (even if strict=False).
+    regardless of a value of ``full_final_arguments``
+    argument (even if full_final_arguments=False).
 
     This function recursively checks for dependencies. If a cyclic dependency
     is found, ``CyclicDependencyError`` is raised.
@@ -182,14 +185,15 @@ def plan(class_or_func: Callable, *,
     ...    **_get_kwargs(instances, plan_steps.final_arguments))
     'Called with a, b, non_annotated'
 
-    The returned plan when ``strict=True`` is given can be directly built. See
+    The returned plan when ``full_final_arguments=True`` is given can be
+    directly built. See
     the following example:
     >>> class C:
     ...     def __init__(self, a: A, b: B):
     ...         self.a = a
     ...         self.b = b
     ...
-    >>> plan_steps = plan(C, is_injectable={A, B, C}, strict=True)
+    >>> plan_steps = plan(C, is_injectable={A, B, C}, full_final_arguments=True)
     >>> instances = build(plan_steps)
     >>> c = instances[C]  # Instance of C class with all dependencies resolved
     >>> assert type(c) is C
@@ -210,9 +214,10 @@ def plan(class_or_func: Callable, *,
         its dependencies, so it acts as a way to stop dependency injection
         for these classes/functions where we don't want it because they will be
         provided by other means.
-    :param strict: If the argument ``strict`` is True then this function fails
+    :param full_final_arguments: If the argument ``full_final_arguments``
+        is True then this function fails
         with ``NonProvidableError`` if not all the required arguments
-        for the input class/function can be resolved. When ``strict`` is False,
+        for the input class/function can be resolved. When ``full_final_arguments`` is False,
         this function provides the plan only for those arguments that could
         be resolved, so the last task of the plan could be incomplete.
     :return: A plan
@@ -223,7 +228,7 @@ def plan(class_or_func: Callable, *,
     plan_odict = _plan(class_or_func,
                  is_injectable=is_injectable,
                  externally_provided=externally_provided,
-                 strict=strict,
+                 full_final_arguments=full_final_arguments,
                  dependency_stack=None)
     return Plan(plan_odict.items())
 
@@ -233,7 +238,7 @@ _PlanDict = MutableMapping[Callable, Dict[str, Callable]]
 def _plan(class_or_func: Callable, *,
           is_injectable: Callable[[Callable], bool],
           externally_provided: Callable[[Callable], bool],
-          strict,
+          full_final_arguments,
           dependency_stack=None) -> _PlanDict:
     dependency_stack = dependency_stack or []
     plan_seq = OrderedDict()  # type: _PlanDict
@@ -268,12 +273,12 @@ def _plan(class_or_func: Callable, *,
                 plan = _plan(sel_cls,
                              is_injectable=is_injectable,
                              externally_provided=externally_provided,
-                             strict=True,
+                             full_final_arguments=True,
                              dependency_stack=dependency_stack)
                 plan_seq.update(plan)
             type_for_arg[argname] = sel_cls
         else:
-            if strict:
+            if full_final_arguments:
                 init_str = ".__init__()" if is_class else ""
                 if not types:
                     msg = "Parameter '{}' is lacking annotations in " \

@@ -98,10 +98,10 @@ def test_cannot_be_provided():
     # partial plan also allowed (C is not required to be injectable):
     andi.plan(WithC, is_injectable={B}, externally_provided={A})
 
-    # But should fail on strict regimen
+    # But should fail on full_final_arguments regimen
     with pytest.raises(andi.NonProvidableError):
         andi.plan(WithC, is_injectable={B}, externally_provided={A},
-                  strict=True)
+                  full_final_arguments=True)
 
     # C is injectable, but A and B are not injectable. So an exception is raised:
     # every single injectable dependency found must be satisfiable.
@@ -127,7 +127,7 @@ def test_plan_with_optionals():
     assert instances[fn] == "invoked!"
 
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(fn, is_injectable={}, strict=True)
+        andi.plan(fn, is_injectable={}, full_final_arguments=True)
 
 
 def test_plan_with_union():
@@ -154,10 +154,10 @@ def test_plan_with_union():
     assert plan == [(B, {}), (WithUnion, {'a_or_b': B})]
 
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(WithUnion, is_injectable={WithUnion}, strict=True)
+        andi.plan(WithUnion, is_injectable={WithUnion}, full_final_arguments=True)
 
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(WithUnion, is_injectable={}, strict=True)
+        andi.plan(WithUnion, is_injectable={}, full_final_arguments=True)
 
 
 def test_plan_with_optionals_and_union():
@@ -190,7 +190,7 @@ def test_plan_with_optionals_and_union():
     assert type(build(plan)[fn]) == B
 
     with pytest.raises(NonProvidableError):
-        andi.plan(fn, is_injectable={}, strict=True)
+        andi.plan(fn, is_injectable={}, full_final_arguments=True)
 
 
 def test_externally_provided():
@@ -250,7 +250,7 @@ def test_plan_for_func():
 
     with pytest.raises(andi.NonProvidableError):
         andi.plan(fn, is_injectable=ALL,
-                  externally_provided=[A], strict=True)
+                  externally_provided=[A], full_final_arguments=True)
 
 
 def test_plan_non_annotated_args():
@@ -286,16 +286,16 @@ def test_plan_non_annotated_args():
 
     with pytest.raises(andi.NonProvidableError):
         andi.plan(WithNonAnnArgs, is_injectable=ALL, externally_provided=[A],
-                  strict=True)
+                  full_final_arguments=True)
 
 
-@pytest.mark.parametrize("strict", [[True], [False]])
-def test_plan_no_args(strict):
+@pytest.mark.parametrize("full_final_arguments", [[True], [False]])
+def test_plan_no_args(full_final_arguments):
     def fn():
         return True
 
     plan = andi.plan(fn, is_injectable=[],
-                     strict=strict)
+                     full_final_arguments=full_final_arguments)
     assert plan == [(fn, {})]
     instances = build(plan)
     assert instances[fn]
@@ -303,8 +303,8 @@ def test_plan_no_args(strict):
         **{arg: instances[tp] for arg, tp in plan.final_arguments.items()})
 
 
-@pytest.mark.parametrize("strict", [[True], [False]])
-def test_plan_use_fn_as_annotations(strict):
+@pytest.mark.parametrize("full_final_arguments", [[True], [False]])
+def test_plan_use_fn_as_annotations(full_final_arguments):
     def fn_ann(b: B):
         setattr(b, "modified", True)
         return b
@@ -312,6 +312,6 @@ def test_plan_use_fn_as_annotations(strict):
     def fn(b: fn_ann):
         return b
 
-    plan = andi.plan(fn, is_injectable=[fn_ann, B], strict=strict)
+    plan = andi.plan(fn, is_injectable=[fn_ann, B], full_final_arguments=full_final_arguments)
     instances = build(plan)
     assert instances[fn].modified
