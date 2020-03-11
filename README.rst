@@ -497,7 +497,7 @@ for writing spiders to crawl web pages.
 
 The basic idea is that there is framework in which the user
 can write spiders. Each spider is a collection of callbacks
-that can process data from a page, emit data or request new
+that can process data from a page, emit extracted data or request new
 pages. Then, there is an engine that takes care of downloading
 the web pages
 and invoking the user defined callbacks, chaining requests
@@ -520,7 +520,7 @@ from a cooking page:
 
 
 It would be handy if the user can define some requirements
-just as annotated parameters of the callbacks. And ``andi`` make is
+just by annotating parameters in the callbacks. And ``andi`` make it
 possible.
 
 For example, a particular callback could require access to the cookies:
@@ -550,7 +550,7 @@ it's own class:
         def to_item():
             return extract_recipe(self.response)
 
-The callback could be defined as:
+The callback could then be defined as:
 
 .. code-block:: python
 
@@ -568,11 +568,11 @@ and reduce boilerplate.
 Web server example
 ******************
 
-That can be useful also for implementing a new
+``andi`` can be useful also for implementing a new
 web framework.
 
-Let's imagine you can declare your sever in a
-class:
+Let's imagine a framework where you can declare your sever in a
+class like the following:
 
 .. code-block:: python
 
@@ -580,15 +580,15 @@ class:
 
         @route("/products")
         def productspage(self, request: Request):
-            # return the composed page
+            ... # return the composed page
 
         @route("/sales")
         def salespage(self, request: Request):
-            # return the composed page
+            ... # return the composed page
 
 The former case is composed of two endpoints, one for serving
 a page with a summary of sales, and a second one to serve
-the products.
+the products list.
 
 Connection to the database can be required
 to sever these pages. This logic could be encapsulated
@@ -619,11 +619,11 @@ that they require these objects:
 
         @route("/products")
         def productspage(self, request: Request, products: Products):
-            # return the composed page
+            ... # return the composed page
 
         @route("/sales")
         def salespage(self, request: Request, sales: Sales):
-            # return the composed page
+            ... # return the composed page
 
 And the framework can then be responsible to fulfill these
 dependencies. The flexibility offered would be a great advantage.
@@ -635,7 +635,7 @@ both sales and products:
         @route("/overview")
         def productspage(self, request: Request,
                          products: Products, sales: Sales):
-            # return the composed overview page
+            ... # return the composed overview page
 
 
 Contributing
