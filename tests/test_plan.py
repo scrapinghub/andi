@@ -3,6 +3,7 @@ from typing import Union, Optional
 import pytest
 
 import andi
+from andi import NonProvidableError
 from tests.utils import build
 from collections import OrderedDict as OD
 
@@ -107,26 +108,89 @@ def test_cannot_be_provided():
     with pytest.raises(andi.NonProvidableError):
         andi.plan(WithC, is_injectable=[C])
 
-    class WithOptionals:
+
+def test_plan_with_optionals():
+    def fn(a: Optional[str]):
+        assert a is None
+        return "invoked!"
+
+    plan = andi.plan(fn, is_injectable={type(None), str},
+                     externally_provided={str})
+    assert plan ==  [(str, {}), (fn, {'a': str})]
+
+    plan = andi.plan(fn, is_injectable={type(None)})
+    assert plan.dependencies == [(type(None), {})]
+    assert plan.final_arguments == {'a': type(None)}
+
+    instances = build(plan)
+    assert instances[type(None)] is None
+    assert instances[fn] == "invoked!"
+
+    with pytest.raises(andi.NonProvidableError):
+        andi.plan(fn, is_injectable={}, strict=True)
+
+
+def test_plan_with_union():
+    class WithUnion:
 
         def __init__(self, a_or_b: Union[A, B]):
             pass
 
-    plan = andi.plan(WithOptionals,
-                     is_injectable={WithOptionals, A, B},
+    plan = andi.plan(WithUnion,
+                     is_injectable={WithUnion, A, B},
                      externally_provided={A})
-    assert plan == [(A, {}), (WithOptionals, {'a_or_b': A})]
+    assert plan == [(A, {}), (WithUnion, {'a_or_b': A})]
 
-    plan = andi.plan(WithOptionals,
-                     is_injectable={WithOptionals, B},
+    plan = andi.plan(WithUnion,
+                     is_injectable={WithUnion, B},
                      externally_provided={A})
-    assert plan == [(A, {}), (WithOptionals, {'a_or_b': A})]
+    assert plan == [(A, {}), (WithUnion, {'a_or_b': A})]
 
-    plan = andi.plan(WithOptionals, is_injectable={WithOptionals, B})
-    assert plan == [(B, {}), (WithOptionals, {'a_or_b': B})]
+    plan = andi.plan(WithUnion, is_injectable={WithUnion, B})
+    assert plan == [(B, {}), (WithUnion, {'a_or_b': B})]
+
+    plan = andi.plan(WithUnion, is_injectable={WithUnion},
+                     externally_provided={B})
+    assert plan == [(B, {}), (WithUnion, {'a_or_b': B})]
 
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(WithOptionals, is_injectable=[WithOptionals], strict=True)
+        andi.plan(WithUnion, is_injectable={WithUnion}, strict=True)
+
+    with pytest.raises(andi.NonProvidableError):
+        andi.plan(WithUnion, is_injectable={}, strict=True)
+
+
+def test_plan_with_optionals_and_union():
+    def fn(str_or_b_or_None: Optional[Union[str, B]]):
+        return str_or_b_or_None
+
+    plan = andi.plan(fn, is_injectable={str, B, type(None)})
+    assert type(build(plan)[fn]) == str
+
+    plan = andi.plan(fn, is_injectable={B, type(None)})
+    assert type(build(plan)[fn]) == B
+
+    plan = andi.plan(fn, is_injectable={B, type(None)},
+                     externally_provided={str})
+    assert type(build(plan)[fn]) == str
+
+    plan = andi.plan(fn, is_injectable={type(None)})
+    assert build(plan)[fn] is None
+
+    plan = andi.plan(fn, is_injectable={type(None)},
+                     externally_provided={str})
+    assert type(build(plan)[fn]) == str
+
+    plan = andi.plan(fn, is_injectable={type(None)},
+                     externally_provided={str, B})
+    assert type(build(plan)[fn]) == str
+
+    plan = andi.plan(fn, is_injectable={type(None)},
+                     externally_provided={B})
+    assert type(build(plan)[fn]) == B
+
+    with pytest.raises(NonProvidableError):
+        andi.plan(fn, is_injectable={}, strict=True)
 
 
 def test_externally_provided():
@@ -187,24 +251,6 @@ def test_plan_for_func():
     with pytest.raises(andi.NonProvidableError):
         andi.plan(fn, is_injectable=ALL,
                   externally_provided=[A], strict=True)
-
-
-def test_plan_with_optionals():
-    def fn(a: Optional[str]):
-        assert a is None
-        return "invoked!"
-
-    plan = andi.plan(fn, is_injectable={type(None), str},
-                     externally_provided={str})
-    assert plan ==  [(str, {}), (fn, {'a': str})]
-
-    plan = andi.plan(fn, is_injectable={type(None)})
-    assert plan.dependencies == [(type(None), {})]
-    assert plan.final_arguments == {'a': type(None)}
-
-    instances = build(plan)
-    assert instances[type(None)] is None
-    assert instances[fn] == "invoked!"
 
 
 def test_plan_non_annotated_args():
