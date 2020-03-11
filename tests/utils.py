@@ -1,9 +1,9 @@
-from typing import Optional, Dict, Any, Callable
+from typing import Optional, Dict, Any, Callable, List
 
-from andi import PlanStepList
+from andi import Step
 
 
-def build(plan: PlanStepList, instances_stock: Optional[Dict[Callable, Any]] = None):
+def build(plan: List[Step], instances_stock: Optional[Dict[Callable, Any]] = None):
     """ Build instances dictionary from a plan """
     instances_stock = instances_stock or {}
     instances = {}
