@@ -254,7 +254,8 @@ def _plan(class_or_func: Callable, *,
 
     dependency_stack = dependency_stack + [class_or_func]
 
-    if isinstance(class_or_func, type):
+    is_class = isinstance(class_or_func, type)
+    if is_class:
         cls = cast(Type, class_or_func)
         arguments = inspect(cls.__init__)
     else:
@@ -273,15 +274,16 @@ def _plan(class_or_func: Callable, *,
             type_for_arg[argname] = sel_cls
         else:
             if strict:
+                init_str = ".__init__()" if is_class else ""
                 if not types:
                     msg = "Parameter '{}' is lacking annotations in " \
-                          "'{}.__init__()'. Not possible to build a plan".format(
-                        argname, class_or_func)
+                          "'{}{}'. Not possible to build a plan".format(
+                        argname, class_or_func, init_str)
                 else:
                     msg = "Any of {} types are required ".format(types)
                     msg += " for parameter '{}' ".format(argname)
-                    msg += " in '{}.__init__()' but none can be provided".format(
-                        class_or_func)
+                    msg += " in '{}{}' but none can be provided".format(
+                        class_or_func, init_str)
                 raise NonProvidableError(msg)
 
     plan_seq[class_or_func] = type_for_arg
