@@ -7,11 +7,9 @@ def build(plan: List[Step], instances_stock: Optional[Dict[Callable, Any]] = Non
     """ Build instances dictionary from a plan """
     instances_stock = instances_stock or {}
     instances = {}
-    for cls, params in plan:
+    for cls, kwargs_spec in plan:
         if cls in instances_stock:
             instances[cls] = instances_stock[cls]
         else:
-            kwargs = {param: instances[pcls]
-                      for param, pcls in params.items()}
-            instances[cls] = cls(**kwargs)
+            instances[cls] = cls(**kwargs_spec.kwargs(instances))
     return instances

@@ -39,6 +39,9 @@ ALL = [A, B, C, D, E]
 SOME = [A, B, C]
 
 
+def _final_kwargs_spec(plan):
+    return plan[-1][1]
+
 def test_plan_and_build():
     plan = andi.plan(E, is_injectable=lambda x: True,
                      externally_provided={A})
@@ -120,7 +123,7 @@ def test_plan_with_optionals():
 
     plan = andi.plan(fn, is_injectable={type(None)})
     assert plan.dependencies == [(type(None), {})]
-    assert plan.final_kwargs_spec == {'a': type(None)}
+    assert _final_kwargs_spec(plan) == {'a': type(None)}
 
     instances = build(plan)
     assert instances[type(None)] is None
@@ -197,24 +200,24 @@ def test_externally_provided():
     plan = andi.plan(E.__init__, is_injectable=ALL,
                      externally_provided=ALL)
     assert dict(plan.dependencies) == {B: {}, C: {}, D: {}}
-    assert plan.final_kwargs_spec == {'b': B, 'c': C, 'd': D}
+    assert _final_kwargs_spec(plan) == {'b': B, 'c': C, 'd': D}
 
     plan = andi.plan(E.__init__, is_injectable=[],
                      externally_provided=ALL)
     assert dict(plan.dependencies) == {B: {}, C: {}, D: {}}
-    assert plan.final_kwargs_spec == {'b': B, 'c': C, 'd': D}
+    assert _final_kwargs_spec(plan) == {'b': B, 'c': C, 'd': D}
 
     plan = andi.plan(E, is_injectable=ALL, externally_provided=ALL)
     assert plan == [(E, {})]
-    assert plan.final_kwargs_spec == {}
+    assert _final_kwargs_spec(plan) == {}
     assert plan.dependencies == []
 
     plan = andi.plan(E, is_injectable=ALL,
                      externally_provided={A, B, C, D})
     assert dict(plan).keys() == {B, C, D, E}
     assert plan[-1][0] == E
-    assert plan.final_kwargs_spec == {'b': B, 'c': C, 'd': D}
-    assert plan.final_kwargs_spec == plan[-1][1]
+    assert _final_kwargs_spec(plan) == {'b': B, 'c': C, 'd': D}
+    assert _final_kwargs_spec(plan) == plan[-1][1]
 
     plan = andi.plan(E, is_injectable=ALL,
                      externally_provided={A, B, D})
@@ -238,12 +241,9 @@ def test_plan_for_func():
 
     plan = andi.plan(fn, is_injectable=ALL,
                      externally_provided={A})
-    assert plan.final_kwargs_spec == {'e': E, 'c': C}
+    assert _final_kwargs_spec(plan) == {'e': E, 'c': C}
     instances = build(plan.dependencies, {A: ""})
-    kwargs = dict(other="yeah!",
-                  **{arg: instances[tp]
-                     for arg, tp in plan.final_kwargs_spec.items()})
-    fn(**kwargs)
+    fn(other="yeah!", **plan.final_kwargs(instances))
 
     with pytest.raises(TypeError):
         build(plan, {A: ""})
@@ -267,21 +267,20 @@ def test_plan_non_annotated_args():
     )
 
     assert dict(plan.dependencies) == {A: {}, B: {}}
-    assert plan.final_kwargs_spec == {'a': A, 'b': B}
+    assert _final_kwargs_spec(plan) == {'a': A, 'b': B}
 
     plan_class = andi.plan(WithNonAnnArgs,
                            is_injectable=ALL,
                            externally_provided=[A])
     assert plan_class.dependencies == plan.dependencies
-    assert plan_class.final_kwargs_spec == plan.final_kwargs_spec
+    assert _final_kwargs_spec(plan_class) == _final_kwargs_spec(plan)
 
     with pytest.raises(TypeError):
         build(plan)
 
     instances = build(plan.dependencies, instances_stock={A: ""})
     o = WithNonAnnArgs(non_ann=None, non_ann_kw=None,
-                       **{arg: instances[tp] for arg, tp
-                          in plan.final_kwargs_spec.items()})
+                       **plan.final_kwargs(instances))
     assert isinstance(o, WithNonAnnArgs)
 
     with pytest.raises(andi.NonProvidableError):
@@ -299,10 +298,7 @@ def test_plan_no_args(full_final_arguments):
     assert plan == [(fn, {})]
     instances = build(plan)
     assert instances[fn]
-    assert fn(
-        **{arg: instances[tp] for arg, tp in plan.final_kwargs_spec.items()})
-    assert fn(
-        **plan.final_kwargs(instances))
+    assert fn(**plan.final_kwargs(instances))
 
 
 @pytest.mark.parametrize("full_final_arguments", [[True], [False]])
@@ -314,6 +310,7 @@ def test_plan_use_fn_as_annotations(full_final_arguments):
     def fn(b: fn_ann):
         return b
 
-    plan = andi.plan(fn, is_injectable=[fn_ann, B], full_final_arguments=full_final_arguments)
+    plan = andi.plan(fn, is_injectable=[fn_ann, B],
+                     full_final_arguments=full_final_arguments)
     instances = build(plan)
     assert instances[fn].modified

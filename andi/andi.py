@@ -92,18 +92,6 @@ class Plan(List[Step]):
         """
         return self[:-1]
 
-    @property
-    def final_kwargs_spec(self) -> KwargsSpec:
-        """
-        TODO: should we remove this function at all?
-        The input function/class argument names and its builders for
-        those arguments for which it was possible to resolve the dependencies.
-
-        Equivalent to ``self[-1][1]``
-        """
-        _, params = self[-1]
-        return params
-
     def final_kwargs(self, instances: Mapping[Callable, Any]) -> Dict[str, Any]:
         """
         Build the kwargs dict required to invoke the class/function
