@@ -49,7 +49,7 @@ class KwargsSpec(Dict[str, Callable]):
     and the callable that is required to build an instance for such argument.
     """
 
-    def kwargs(self, instances: Mapping[Callable, Any]):
+    def kwargs(self, instances: Mapping[Callable, Any]) -> Dict[str, Any]:
         """
         Build the kwargs dict based on the spec using the prebuilt
         instances provided in the input dictionary.
