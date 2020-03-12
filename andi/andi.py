@@ -93,7 +93,7 @@ class Plan(List[Step]):
         return self[:-1]
 
     @property
-    def final_kwargs_spec(self) -> Dict[str, Callable]:
+    def final_kwargs_spec(self) -> KwargsSpec:
         """
         TODO: should we remove this function at all?
         The input function/class argument names and its builders for
