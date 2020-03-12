@@ -120,7 +120,7 @@ def test_plan_with_optionals():
 
     plan = andi.plan(fn, is_injectable={type(None)})
     assert plan.dependencies == [(type(None), {})]
-    assert plan.final_arguments == {'a': type(None)}
+    assert plan.final_kwargs_spec == {'a': type(None)}
 
     instances = build(plan)
     assert instances[type(None)] is None
@@ -197,24 +197,24 @@ def test_externally_provided():
     plan = andi.plan(E.__init__, is_injectable=ALL,
                      externally_provided=ALL)
     assert dict(plan.dependencies) == {B: {}, C: {}, D: {}}
-    assert plan.final_arguments == {'b': B, 'c': C, 'd': D}
+    assert plan.final_kwargs_spec == {'b': B, 'c': C, 'd': D}
 
     plan = andi.plan(E.__init__, is_injectable=[],
                      externally_provided=ALL)
     assert dict(plan.dependencies) == {B: {}, C: {}, D: {}}
-    assert plan.final_arguments == {'b': B, 'c': C, 'd': D}
+    assert plan.final_kwargs_spec == {'b': B, 'c': C, 'd': D}
 
     plan = andi.plan(E, is_injectable=ALL, externally_provided=ALL)
     assert plan == [(E, {})]
-    assert plan.final_arguments == {}
+    assert plan.final_kwargs_spec == {}
     assert plan.dependencies == []
 
     plan = andi.plan(E, is_injectable=ALL,
                      externally_provided={A, B, C, D})
     assert dict(plan).keys() == {B, C, D, E}
     assert plan[-1][0] == E
-    assert plan.final_arguments == {'b': B, 'c': C, 'd': D}
-    assert plan.final_arguments == plan[-1][1]
+    assert plan.final_kwargs_spec == {'b': B, 'c': C, 'd': D}
+    assert plan.final_kwargs_spec == plan[-1][1]
 
     plan = andi.plan(E, is_injectable=ALL,
                      externally_provided={A, B, D})
@@ -238,11 +238,11 @@ def test_plan_for_func():
 
     plan = andi.plan(fn, is_injectable=ALL,
                      externally_provided={A})
-    assert plan.final_arguments == {'e': E, 'c': C}
+    assert plan.final_kwargs_spec == {'e': E, 'c': C}
     instances = build(plan.dependencies, {A: ""})
     kwargs = dict(other="yeah!",
                   **{arg: instances[tp]
-                     for arg, tp in plan.final_arguments.items()})
+                     for arg, tp in plan.final_kwargs_spec.items()})
     fn(**kwargs)
 
     with pytest.raises(TypeError):
@@ -267,13 +267,13 @@ def test_plan_non_annotated_args():
     )
 
     assert dict(plan.dependencies) == {A: {}, B: {}}
-    assert plan.final_arguments == {'a': A, 'b': B}
+    assert plan.final_kwargs_spec == {'a': A, 'b': B}
 
     plan_class = andi.plan(WithNonAnnArgs,
                            is_injectable=ALL,
                            externally_provided=[A])
     assert plan_class.dependencies == plan.dependencies
-    assert plan_class.final_arguments == plan.final_arguments
+    assert plan_class.final_kwargs_spec == plan.final_kwargs_spec
 
     with pytest.raises(TypeError):
         build(plan)
@@ -281,7 +281,7 @@ def test_plan_non_annotated_args():
     instances = build(plan.dependencies, instances_stock={A: ""})
     o = WithNonAnnArgs(non_ann=None, non_ann_kw=None,
                        **{arg: instances[tp] for arg, tp
-                          in plan.final_arguments.items()})
+                          in plan.final_kwargs_spec.items()})
     assert isinstance(o, WithNonAnnArgs)
 
     with pytest.raises(andi.NonProvidableError):
@@ -300,7 +300,9 @@ def test_plan_no_args(full_final_arguments):
     instances = build(plan)
     assert instances[fn]
     assert fn(
-        **{arg: instances[tp] for arg, tp in plan.final_arguments.items()})
+        **{arg: instances[tp] for arg, tp in plan.final_kwargs_spec.items()})
+    assert fn(
+        **plan.final_kwargs(instances))
 
 
 @pytest.mark.parametrize("full_final_arguments", [[True], [False]])

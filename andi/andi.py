@@ -2,7 +2,7 @@
 from collections import OrderedDict
 from typing import (
     Dict, List, Optional, Type, Callable, Union, Container,
-    get_type_hints, Tuple, cast, MutableMapping)
+    get_type_hints, Tuple, cast, MutableMapping, Any, Mapping)
 
 from andi.typeutils import (
     get_union_args,
@@ -43,7 +43,25 @@ ContainerOrCallableType = Union[
 ]
 
 
-Step = Tuple[Callable, Dict[str, Callable]]
+class KwargsSpec(Dict[str, Callable]):
+    """
+    kwargs specification. Dict with the name of the argument
+    and the callable that is required to build an instance for such argument.
+    """
+
+    def kwargs(self, instances: Mapping[Callable, Any]) -> Dict[str, Any]:
+        """
+        Build the kwargs dict based on the spec using the prebuilt
+        instances provided in the input dictionary.
+
+        :param instances: A dict with the already prebuilt dependencies keyed
+                          by its builder
+        :return: a kwargs dict ready to be passed to a callable
+        """
+        return {name: instances[cls] for name, cls in self.items()}
+
+
+Step = Tuple[Callable, KwargsSpec]
 
 
 class Plan(List[Step]):
@@ -75,8 +93,9 @@ class Plan(List[Step]):
         return self[:-1]
 
     @property
-    def final_arguments(self) -> Dict[str, Callable]:
+    def final_kwargs_spec(self) -> KwargsSpec:
         """
+        TODO: should we remove this function at all?
         The input function/class argument names and its builders for
         those arguments for which it was possible to resolve the dependencies.
 
@@ -84,6 +103,18 @@ class Plan(List[Step]):
         """
         _, params = self[-1]
         return params
+
+    def final_kwargs(self, instances: Mapping[Callable, Any]) -> Dict[str, Any]:
+        """
+        Build the kwargs dict required to invoke the class/function
+        for which the plan was done for.
+        Equivalent to ``plan[-1][1].kwargs(instances)``
+
+        :param instances: A dict with the already prebuilt dependencies keyed
+                          by its builder
+        :return: a kwargs dict ready to be passed to a callable
+        """
+        return self[-1][1].kwargs(instances)
 
 
 def plan(class_or_func: Callable, *,
@@ -169,20 +200,17 @@ def plan(class_or_func: Callable, *,
     ...     assert b.a is a
     ...     return 'Called with {}, {}, {}'.format(a.value, b.value, non_annotated)
     ...
-    >>> def _get_kwargs(instances, kwarg_types):
-    ...     return {name: instances[cls] for name, cls in kwarg_types.items()}
-    ...
     >>> def build(plan):  # Build all the instances from a plan
     ...     instances = {}
-    ...     for fn_or_cls, args in plan:
-    ...         instances[fn_or_cls] = fn_or_cls(**_get_kwargs(instances, args))
+    ...     for fn_or_cls, kwargs_spec in plan:
+    ...         instances[fn_or_cls] = fn_or_cls(**kwargs_spec.kwargs(instances))
     ...     return instances
     ...
     >>> plan_steps = plan(fn, is_injectable={A, B})
     >>> instances = build(plan_steps.dependencies)
     >>> # Finally invoking the function with all the dependencies resolved
     >>> fn(non_annotated='non_annotated',
-    ...    **_get_kwargs(instances, plan_steps.final_arguments))
+    ...    **plan_steps.final_kwargs(instances))
     'Called with a, b, non_annotated'
 
     The returned plan when ``full_final_arguments=True`` is given can be
@@ -233,7 +261,7 @@ def plan(class_or_func: Callable, *,
     return Plan(plan_odict.items())
 
 
-_PlanDict = MutableMapping[Callable, Dict[str, Callable]]
+_PlanDict = MutableMapping[Callable, KwargsSpec]
 
 def _plan(class_or_func: Callable, *,
           is_injectable: Callable[[Callable], bool],
@@ -242,10 +270,10 @@ def _plan(class_or_func: Callable, *,
           dependency_stack=None) -> _PlanDict:
     dependency_stack = dependency_stack or []
     plan_seq = OrderedDict()  # type: _PlanDict
-    type_for_arg = {}
+    type_for_arg = KwargsSpec()
 
     if externally_provided(class_or_func):
-        plan_seq[class_or_func] = {}
+        plan_seq[class_or_func] = KwargsSpec()
         return plan_seq
 
     if dependency_stack and not is_injectable(class_or_func):
