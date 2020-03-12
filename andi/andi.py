@@ -108,7 +108,7 @@ class Plan(List[Step]):
         """
         Build the kwargs dict required to invoke the class/function
         for which the plan was done for.
-        Equivalent to ``self[-1][1].kwargs(instances)``
+        Equivalent to ``plan[-1][1].kwargs(instances)``
 
         :param instances: A dict with the already prebuilt dependencies keyed
                           by its builder
