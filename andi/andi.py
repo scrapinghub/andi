@@ -71,8 +71,9 @@ class Plan(List[Step]):
     they are dependant among them.
 
     The plan is itself a list of tuples of type
-    ``Tuple[Callable, Dict[str, Callable]]``
-    corresponding to
+    ``Tuple[Callable, KwargsSpec]``. Note that
+    ``KwargsSpec`` is almost a ``Dict[str, Callable]``
+    so each step in the plan corresponds to
     (callable_to_invoke, (param_name -> callable_to_build_the_param)).
     """
 
