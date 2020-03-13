@@ -132,8 +132,8 @@ def plan(class_or_func: Callable, *,
         def build(plan):  # Build all the instances from a plan
             instances = {}
             for fn_or_cls, kwargs_spec in plan:
-                kwargs = {arg: instances[arg_cls]
-                          for arg, arg_cls in args.items()}
+                kwargs = {arg: instances[arg_builder]
+                          for arg, arg_builder in kwargs_spec.items()}
                 # or alternatively: kwargs = kwargs_spec.kwargs(instances)
                 instances[fn_or_cls] = fn_or_cls(**kwargs)
             return instances
