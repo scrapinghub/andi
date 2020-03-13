@@ -116,7 +116,7 @@ def plan(class_or_func: Callable, *,
     makes dependency injection easy. Type annotations are used
     to determine with instance must be built to satisfy the dependency.
 
-    The plan is a sequence steps.
+    The plan is a sequence of steps.
     Each step in the plan is a tuple with:
 
     * A callable with the
