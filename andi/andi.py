@@ -77,6 +77,20 @@ class Plan(List[Step]):
     (callable_to_invoke, (param_name -> callable_to_build_the_param)).
     """
 
+    def __init__(self, *args, **kwargs):
+        self._last_step_exception = None
+        super().__init__(*args, **kwargs)
+
+
+    def assert_complete(self):
+        """
+        Will raise an exception with a sensible message if plan is not complete
+        because it was not possible to resolve all arguments for the inspected
+        class or function.
+        """
+        if self._last_step_exception:
+            raise self._last_step_exception
+
     @property
     def dependencies(self) -> List[Step]:
         """
@@ -108,8 +122,7 @@ class Plan(List[Step]):
 
 def plan(class_or_func: Callable, *,
          is_injectable: ContainerOrCallableType,
-         externally_provided: Optional[ContainerOrCallableType] = None,
-         full_final_kwargs=False) -> Plan:
+         externally_provided: Optional[ContainerOrCallableType] = None) -> Plan:
     """ Plan the sequence of instantiation steps required to fulfill the
     the arguments of the given function or the arguments of its
     constructor if a class is given instead. In other words, this function
@@ -210,7 +223,8 @@ def plan(class_or_func: Callable, *,
     ...         self.a = a
     ...         self.b = b
     ...
-    >>> plan_steps = plan(C, is_injectable={A, B, C}, full_final_kwargs=True)
+    >>> plan_steps = plan(C, is_injectable={A, B, C})
+    >>> plan_steps.assert_complete()
     >>> instances = build(plan_steps)
     >>> c = instances[C]  # Instance of C class with all dependencies resolved
     >>> assert type(c) is C
@@ -246,28 +260,26 @@ def plan(class_or_func: Callable, *,
     is_injectable = _ensure_can_provide_func(is_injectable)
     externally_provided = _ensure_can_provide_func(externally_provided)
 
-    plan_odict = _plan(class_or_func,
+    plan = _plan(class_or_func,
                  is_injectable=is_injectable,
                  externally_provided=externally_provided,
-                 full_final_kwargs=full_final_kwargs,
+                 on_exception_raise=False,
                  dependency_stack=None)
-    return Plan(plan_odict.items())
+    return plan
 
-
-_PlanDict = MutableMapping[Callable, KwargsSpec]
 
 def _plan(class_or_func: Callable, *,
           is_injectable: Callable[[Callable], bool],
           externally_provided: Callable[[Callable], bool],
-          full_final_kwargs,
-          dependency_stack=None) -> _PlanDict:
+          on_exception_raise,
+          dependency_stack=None) -> Plan:
     dependency_stack = dependency_stack or []
-    plan_seq = OrderedDict()  # type: _PlanDict
+    plan_od = OrderedDict()  # type: MutableMapping[Callable, KwargsSpec]
     type_for_arg = KwargsSpec()
 
     if externally_provided(class_or_func):
-        plan_seq[class_or_func] = KwargsSpec()
-        return plan_seq
+        plan_od[class_or_func] = KwargsSpec()
+        return Plan(plan_od.items())
 
     if dependency_stack and not is_injectable(class_or_func):
         raise NonProvidableError(
@@ -287,33 +299,37 @@ def _plan(class_or_func: Callable, *,
     else:
         arguments = inspect(class_or_func)
 
+    exception = None
     for argname, types in arguments.items():
         sel_cls = _select_type(types, is_injectable, externally_provided)
         if sel_cls is not None:
-            if sel_cls not in plan_seq:
+            if sel_cls not in plan_od:
                 plan = _plan(sel_cls,
                              is_injectable=is_injectable,
                              externally_provided=externally_provided,
-                             full_final_kwargs=True,
+                             on_exception_raise=True,
                              dependency_stack=dependency_stack)
-                plan_seq.update(plan)
+                plan_od.update(plan)
             type_for_arg[argname] = sel_cls
         else:
-            if full_final_kwargs:
-                init_str = ".__init__()" if is_class else ""
-                if not types:
-                    msg = "Parameter '{}' is lacking annotations in " \
-                          "'{}{}'. Not possible to build a plan".format(
-                        argname, class_or_func, init_str)
-                else:
-                    msg = "Any of {} types are required ".format(types)
-                    msg += " for parameter '{}' ".format(argname)
-                    msg += " in '{}{}' but none can be provided".format(
-                        class_or_func, init_str)
-                raise NonProvidableError(msg)
+            init_str = ".__init__()" if is_class else ""
+            if not types:
+                msg = "Parameter '{}' is lacking annotations in " \
+                      "'{}{}'. Not possible to build a plan".format(
+                    argname, class_or_func, init_str)
+            else:
+                msg = "Any of {} types are required ".format(types)
+                msg += " for parameter '{}' ".format(argname)
+                msg += " in '{}{}' but none can be provided".format(
+                    class_or_func, init_str)
+            exception = NonProvidableError(msg)
+            if on_exception_raise:
+                raise exception
 
-    plan_seq[class_or_func] = type_for_arg
-    return plan_seq
+    plan_od[class_or_func] = type_for_arg
+    plan = Plan(plan_od.items())
+    plan._last_step_exception = exception
+    return plan
 
 
 def _select_type(types, is_injectable, externally_provided):

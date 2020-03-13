@@ -103,13 +103,14 @@ def test_cannot_be_provided():
 
     # But should fail on full_final_kwargs regimen
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(WithC, is_injectable={B}, externally_provided={A},
-                  full_final_kwargs=True)
+        plan = andi.plan(WithC, is_injectable={B}, externally_provided={A})
+        plan.assert_complete()
 
     # C is injectable, but A and B are not injectable. So an exception is raised:
     # every single injectable dependency found must be satisfiable.
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(WithC, is_injectable=[C])
+        plan = andi.plan(WithC, is_injectable=[C])
+        plan.assert_complete()
 
 
 def test_plan_with_optionals():
@@ -130,7 +131,8 @@ def test_plan_with_optionals():
     assert instances[fn] == "invoked!"
 
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(fn, is_injectable={}, full_final_kwargs=True)
+        plan = andi.plan(fn, is_injectable={},)
+        plan.assert_complete()
 
 
 def test_plan_with_union():
@@ -157,10 +159,12 @@ def test_plan_with_union():
     assert plan == [(B, {}), (WithUnion, {'a_or_b': B})]
 
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(WithUnion, is_injectable={WithUnion}, full_final_kwargs=True)
+        plan = andi.plan(WithUnion, is_injectable={WithUnion})
+        plan.assert_complete()
 
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(WithUnion, is_injectable={}, full_final_kwargs=True)
+        plan = andi.plan(WithUnion, is_injectable={})
+        plan.assert_complete()
 
 
 def test_plan_with_optionals_and_union():
@@ -193,7 +197,8 @@ def test_plan_with_optionals_and_union():
     assert type(build(plan)[fn]) == B
 
     with pytest.raises(NonProvidableError):
-        andi.plan(fn, is_injectable={}, full_final_kwargs=True)
+        plan = andi.plan(fn, is_injectable={})
+        plan.assert_complete()
 
 
 def test_externally_provided():
@@ -249,8 +254,8 @@ def test_plan_for_func():
         build(plan, {A: ""})
 
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(fn, is_injectable=ALL,
-                  externally_provided=[A], full_final_kwargs=True)
+        plan = andi.plan(fn, is_injectable=ALL, externally_provided=[A])
+        plan.assert_complete()
 
 
 def test_plan_non_annotated_args():
@@ -284,25 +289,27 @@ def test_plan_non_annotated_args():
     assert isinstance(o, WithNonAnnArgs)
 
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(WithNonAnnArgs, is_injectable=ALL, externally_provided=[A],
-                  full_final_kwargs=True)
+        plan = andi.plan(WithNonAnnArgs, is_injectable=ALL,
+                         externally_provided=[A])
+        plan.assert_complete()
 
 
-@pytest.mark.parametrize("full_final_kwargs", [[True], [False]])
-def test_plan_no_args(full_final_kwargs):
+@pytest.mark.parametrize("assert_complete", [[True], [False]])
+def test_plan_no_args(assert_complete):
     def fn():
         return True
 
-    plan = andi.plan(fn, is_injectable=[],
-                     full_final_kwargs=full_final_kwargs)
+    plan = andi.plan(fn, is_injectable=[])
+    if assert_complete:
+        plan.assert_complete()
     assert plan == [(fn, {})]
     instances = build(plan)
     assert instances[fn]
     assert fn(**plan.final_kwargs(instances))
 
 
-@pytest.mark.parametrize("full_final_kwargs", [[True], [False]])
-def test_plan_use_fn_as_annotations(full_final_kwargs):
+@pytest.mark.parametrize("assert_complete", [[True], [False]])
+def test_plan_use_fn_as_annotations(assert_complete):
     def fn_ann(b: B):
         setattr(b, "modified", True)
         return b
@@ -310,7 +317,8 @@ def test_plan_use_fn_as_annotations(full_final_kwargs):
     def fn(b: fn_ann):
         return b
 
-    plan = andi.plan(fn, is_injectable=[fn_ann, B],
-                     full_final_kwargs=full_final_kwargs)
+    plan = andi.plan(fn, is_injectable=[fn_ann, B])
+    if assert_complete:
+        plan.assert_complete()
     instances = build(plan)
     assert instances[fn].modified
