@@ -240,8 +240,8 @@ Now the ``drive`` function can be invoked:
     drive(instances[Car], instances[Road], 100)
 
 Note that ``speed`` argument was not annotated. The resultant plan just won't include it
-because the ``andi.plan`` ``full_final_arguments`` parameter is ``False``
-by default. Otherwise, an exception would have been raised (see ``full_final_arguments``
+because the ``andi.plan`` ``full_final_kwargs`` parameter is ``False``
+by default. Otherwise, an exception would have been raised (see ``full_final_kwargs``
 documentation for more information).
 
 An alternative and more generic way to invoke the drive function
@@ -402,7 +402,7 @@ Union
 ``DevelopmentDBConnection`` will be injected in the absence of
 ``ProductionDBConnection``.
 
-Full final arguments mode
+Full final kwargs mode
 -------------------------
 
 By default ``andi.plan`` won't fail if it is not able to provide
@@ -416,7 +416,7 @@ injectable but they will be provided by other means
 
 But in other cases is better to be sure that all dependencies
 are fulfilled and otherwise fail. Such is the case for classes.
-So it is recommended to set ``full_final_arguments=True`` when invoking
+So it is recommended to set ``full_final_kwargs=True`` when invoking
 ``andi.plan`` for classes.
 
 Why type annotations?
