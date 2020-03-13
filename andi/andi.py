@@ -108,7 +108,7 @@ class Plan(List[Step]):
 def plan(class_or_func: Callable, *,
          is_injectable: ContainerOrCallableType,
          externally_provided: Optional[ContainerOrCallableType] = None,
-         full_final_arguments=False) -> Plan:
+         full_final_kwargs=False) -> Plan:
     """ Plan the sequence of instantiation steps required to fulfill the
     the arguments of the given function or the arguments of its
     constructor if a class is given instead. In other words, this function
@@ -120,8 +120,9 @@ def plan(class_or_func: Callable, *,
 
     * A callable with the
       class/function that must be built/invoked in this step
-    * A dictionary with all the kwargs required for the
-      key build/invocation process. This dictionary has the argument names as keys
+    * A ``KwargsSpec`` with all the kwargs required for the
+      build/invocation process. This is a dictionary-like object with
+      the argument names as keys
       and classes/functions required to build them as values.
 
     The best way to understand a plan is to see how a typical building
@@ -129,9 +130,10 @@ def plan(class_or_func: Callable, *,
 
         def build(plan):  # Build all the instances from a plan
             instances = {}
-            for fn_or_cls, args in plan:
+            for fn_or_cls, kwargs_spec in plan:
                 kwargs = {arg: instances[arg_cls]
                           for arg, arg_cls in args.items()}
+                # or alternatively: kwargs = kwargs_spec.kwargs(instances)
                 instances[fn_or_cls] = fn_or_cls(**kwargs)
             return instances
 
@@ -140,36 +142,34 @@ def plan(class_or_func: Callable, *,
     dependencies of the dependencies. In other words, the plan function
     is able to plan the whole tree of dependencies.
 
-    If the argument ``full_final_arguments`` is True then this function will fail
+    If the argument ``full_final_kwargs`` is True then this function will fail
     with ``NonProvidableError`` if not all the required arguments
     for the input class/function can be resolved. When
-    ``full_final_arguments`` is False, this
+    ``full_final_kwargs`` is False, this
     function provides the plan only for those arguments that could be resolved.
 
     In other words, the step for the input function/class
     (which always corresponds with the last step) could be incomplete when
-    ``full_final_arguments=False`` (for example, when some
+    ``full_final_kwargs=False`` (for example, when some
     arguments are not annotated
     because they will be provided by other means).
     In such a cases the above proposed ``build`` function won't work.
 
-    The plan properties ``dependencies`` and ``final_arguments`` come to the
+    The plan properties ``dependencies`` and ``final_kwargs`` come to the
     rescue in such cases, and the build process would be slightly different::
 
         plan = andi.plan(func, ...)
         instances = build(plan.dependencies)
-        kwargs = {arg: instances[arg_cls]
-                  for arg, arg_cls in plan.final_arguments.items()}
         func(
             other_arg='value, # argument that is out of the scope of dependency injection
-            **kwargs,
+            **plan.final_kwargs(instances),
         )
 
     Any type found in the dependency tree that is injectable can as well
     has its own dependencies. If the planner fails to fulfill the dependencies 
     of any injectable found in the tree, ``NonProvidableError`` is raised, 
-    regardless of a value of ``full_final_arguments``
-    argument (even if full_final_arguments=False).
+    regardless of a value of ``full_final_kwargs``
+    argument (even if full_final_kwargs=False).
 
     This function recursively checks for dependencies. If a cyclic dependency
     is found, ``CyclicDependencyError`` is raised.
@@ -201,7 +201,7 @@ def plan(class_or_func: Callable, *,
     ...    **plan_steps.final_kwargs(instances))
     'Called with a, b, non_annotated'
 
-    The returned plan when ``full_final_arguments=True`` is given can be
+    The returned plan when ``full_final_kwargs=True`` is given can be
     directly built. See
     the following example:
     >>> class C:
@@ -209,7 +209,7 @@ def plan(class_or_func: Callable, *,
     ...         self.a = a
     ...         self.b = b
     ...
-    >>> plan_steps = plan(C, is_injectable={A, B, C}, full_final_arguments=True)
+    >>> plan_steps = plan(C, is_injectable={A, B, C}, full_final_kwargs=True)
     >>> instances = build(plan_steps)
     >>> c = instances[C]  # Instance of C class with all dependencies resolved
     >>> assert type(c) is C
@@ -230,12 +230,16 @@ def plan(class_or_func: Callable, *,
         its dependencies, so it acts as a way to stop dependency injection
         for these classes/functions where we don't want it because they will be
         provided by other means.
-    :param full_final_arguments: If the argument ``full_final_arguments``
+    :param full_final_kwargs: If the argument ``full_final_kwargs``
         is True then this function fails
         with ``NonProvidableError`` if not all the required arguments
-        for the input class/function can be resolved. When ``full_final_arguments`` is False,
+        for the input class/function can be resolved.
+        When ``full_final_kwargs`` is False,
         this function provides the plan only for those arguments that could
         be resolved, so the last task of the plan could be incomplete.
+        In other words, the kwargs dict returned by the method
+        ``Plan.final_kwargs`` could not contain all required
+        arguments to build/invoke the input class/function.
     :return: A plan
     """
     is_injectable = _ensure_can_provide_func(is_injectable)
@@ -244,7 +248,7 @@ def plan(class_or_func: Callable, *,
     plan_odict = _plan(class_or_func,
                  is_injectable=is_injectable,
                  externally_provided=externally_provided,
-                 full_final_arguments=full_final_arguments,
+                 full_final_kwargs=full_final_kwargs,
                  dependency_stack=None)
     return Plan(plan_odict.items())
 
@@ -254,7 +258,7 @@ _PlanDict = MutableMapping[Callable, KwargsSpec]
 def _plan(class_or_func: Callable, *,
           is_injectable: Callable[[Callable], bool],
           externally_provided: Callable[[Callable], bool],
-          full_final_arguments,
+          full_final_kwargs,
           dependency_stack=None) -> _PlanDict:
     dependency_stack = dependency_stack or []
     plan_seq = OrderedDict()  # type: _PlanDict
@@ -289,12 +293,12 @@ def _plan(class_or_func: Callable, *,
                 plan = _plan(sel_cls,
                              is_injectable=is_injectable,
                              externally_provided=externally_provided,
-                             full_final_arguments=True,
+                             full_final_kwargs=True,
                              dependency_stack=dependency_stack)
                 plan_seq.update(plan)
             type_for_arg[argname] = sel_cls
         else:
-            if full_final_arguments:
+            if full_final_kwargs:
                 init_str = ".__init__()" if is_class else ""
                 if not types:
                     msg = "Parameter '{}' is lacking annotations in " \
