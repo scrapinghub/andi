@@ -78,18 +78,9 @@ class Plan(List[Step]):
     """
 
     def __init__(self, *args, **kwargs):
-        self._last_step_exception = None
+        self._incomplete = []
+        self._errors = []
         super().__init__(*args, **kwargs)
-
-
-    def assert_complete(self):
-        """
-        Will raise an exception with a sensible message if plan is not complete
-        because it was not possible to resolve all arguments for the inspected
-        class or function.
-        """
-        if self._last_step_exception:
-            raise self._last_step_exception
 
     @property
     def dependencies(self) -> List[Step]:
@@ -118,6 +109,24 @@ class Plan(List[Step]):
         :return: a kwargs dict ready to be passed to a callable
         """
         return self[-1][1].kwargs(instances)
+
+    def assert_valid(self):
+        """
+        Will raise an ``NonProvidableError`` with a sensible message if plan
+        is not valid because it was not possible to find a plan to fulfill all
+        requirements of an injectable dependency or because a cyclic dependency
+        was found or any combination of both causes.
+        """
+        _raise_exception_if_errors(self._errors)
+
+    def assert_valid_and_complete(self):
+        """
+        In addition of the causes of ``assert_valid`` this method will also
+        raise an exception if plan is not fully complete, that is,
+        because it was not possible to resolve all arguments for the inspected
+        class or function.
+        """
+        _raise_exception_if_errors(self._errors + self._incomplete)
 
 
 def plan(class_or_func: Callable, *,
@@ -209,6 +218,7 @@ def plan(class_or_func: Callable, *,
     ...     return instances
     ...
     >>> plan_steps = plan(fn, is_injectable={A, B})
+    >>> plan_steps.assert_valid()
     >>> instances = build(plan_steps.dependencies)
     >>> # Finally invoking the function with all the dependencies resolved
     >>> fn(non_annotated='non_annotated',
@@ -224,7 +234,7 @@ def plan(class_or_func: Callable, *,
     ...         self.b = b
     ...
     >>> plan_steps = plan(C, is_injectable={A, B, C})
-    >>> plan_steps.assert_complete()
+    >>> plan_steps.assert_valid_and_complete()
     >>> instances = build(plan_steps)
     >>> c = instances[C]  # Instance of C class with all dependencies resolved
     >>> assert type(c) is C
@@ -263,7 +273,6 @@ def plan(class_or_func: Callable, *,
     plan = _plan(class_or_func,
                  is_injectable=is_injectable,
                  externally_provided=externally_provided,
-                 on_exception_raise=False,
                  dependency_stack=None)
     return plan
 
@@ -271,9 +280,9 @@ def plan(class_or_func: Callable, *,
 def _plan(class_or_func: Callable, *,
           is_injectable: Callable[[Callable], bool],
           externally_provided: Callable[[Callable], bool],
-          on_exception_raise,
           dependency_stack=None) -> Plan:
     dependency_stack = dependency_stack or []
+    is_root_call = not dependency_stack  # For better code reading
     plan_od = OrderedDict()  # type: MutableMapping[Callable, KwargsSpec]
     type_for_arg = KwargsSpec()
 
@@ -281,14 +290,17 @@ def _plan(class_or_func: Callable, *,
         plan_od[class_or_func] = KwargsSpec()
         return Plan(plan_od.items())
 
-    if dependency_stack and not is_injectable(class_or_func):
-        raise NonProvidableError(
-            "Type {} cannot be provided".format(class_or_func))
+    if not is_root_call and not is_injectable(class_or_func):
+        plan = Plan()
+        plan._errors.append("Type {} cannot be provided".format(class_or_func))
+        return plan
 
     if class_or_func in dependency_stack:
-        raise CyclicDependencyError(
+        plan = Plan()
+        plan._errors.append(
             "Cyclic dependency found. Dependency graph: {}".format(
                 " -> ".join(map(str, dependency_stack + [class_or_func]))))
+        return plan
 
     dependency_stack = dependency_stack + [class_or_func]
 
@@ -299,36 +311,48 @@ def _plan(class_or_func: Callable, *,
     else:
         arguments = inspect(class_or_func)
 
-    exception = None
+    errors = []  # type: List[str]
+    incomplete = []  # type: List[str]
     for argname, types in arguments.items():
         sel_cls = _select_type(types, is_injectable, externally_provided)
+        init_str = ".__init__()" if is_class else ""
         if sel_cls is not None:
             if sel_cls not in plan_od:
                 plan = _plan(sel_cls,
                              is_injectable=is_injectable,
                              externally_provided=externally_provided,
-                             on_exception_raise=True,
                              dependency_stack=dependency_stack)
                 plan_od.update(plan)
-            type_for_arg[argname] = sel_cls
+                errors.extend(plan._errors)
+            if sel_cls in plan_od:
+                type_for_arg[argname] = sel_cls
+            else:
+                incomplete.append("Parameter '{}' in '{}{}' not resolvable "
+                                  "due to underlying resolution errors.".format(
+                    argname, class_or_func, init_str
+                ))
         else:
-            init_str = ".__init__()" if is_class else ""
             if not types:
                 msg = "Parameter '{}' is lacking annotations in " \
-                      "'{}{}'. Not possible to build a plan".format(
+                      "'{}{}'".format(
                     argname, class_or_func, init_str)
             else:
                 msg = "Any of {} types are required ".format(types)
                 msg += " for parameter '{}' ".format(argname)
                 msg += " in '{}{}' but none can be provided".format(
                     class_or_func, init_str)
-            exception = NonProvidableError(msg)
-            if on_exception_raise:
-                raise exception
+            incomplete.append(msg)
 
-    plan_od[class_or_func] = type_for_arg
+    if is_root_call or not incomplete:
+        # Only root call can have incomplete arguments.
+        plan_od[class_or_func] = type_for_arg
     plan = Plan(plan_od.items())
-    plan._last_step_exception = exception
+    plan._errors.extend(errors)
+    if is_root_call:
+        # Keeping incomplete errors separately for the root call
+        plan._incomplete.extend(incomplete)
+    else:
+        plan._errors.extend(incomplete)
     return plan
 
 
@@ -346,3 +370,11 @@ def _ensure_can_provide_func(cont_or_call: Optional[ContainerOrCallableType]
     if isinstance(cont_or_call, Container):
         return cont_or_call.__contains__
     return cont_or_call
+
+
+def _raise_exception_if_errors(errors):
+    if errors:
+        errors_msg = "\n".join("{}. {}".format(idx, msg) for idx, msg
+                               in enumerate(errors))
+        raise NonProvidableError(
+            "Planning failed. Causes: \n{}".format(errors_msg))
