@@ -241,7 +241,7 @@ Now the ``drive`` function can be invoked:
 
 Note that ``speed`` argument was not annotated. The resultant plan just won't include it
 because the ``andi.plan`` ``full_final_kwargs`` parameter is ``False``
-by default. Otherwise, an exception would have been raised (see ``full_final_kwargs``
+by default. Otherwise, an exception would have been raised (see ``full_final_kwargs`` argument
 documentation for more information).
 
 An alternative and more generic way to invoke the drive function
