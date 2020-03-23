@@ -118,7 +118,7 @@ class Plan(List[Step]):
 def plan(class_or_func: Callable, *,
          is_injectable: ContainerOrCallableType,
          externally_provided: Optional[ContainerOrCallableType] = None,
-         full_final_kwargs = False) -> Plan:
+         full_final_kwargs=False) -> Plan:
     """ Plan the sequence of instantiation steps required to fulfill the
     the arguments of the given function or the arguments of its
     constructor if a class is given instead. In other words, this function
@@ -321,13 +321,13 @@ def _plan(class_or_func: Callable, *,
         args_errs.update(non_injectable_errs)
     if is_root_call and args_errs:
         raise NonProvidableError(_exception_msg(class_or_func, args_errs))
-    flatten_errors = [error
-                      for errors in args_errs.values()
-                      for error in errors]
 
     # Plan filling
     plan_od[class_or_func] = type_for_arg
     plan = Plan(plan_od.items(), full_final_kwargs=not non_injectable_errs)
+    flatten_errors = [error
+                      for errors in args_errs.values()
+                      for error in errors]
     return plan, flatten_errors
 
 
