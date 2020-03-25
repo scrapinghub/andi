@@ -42,10 +42,10 @@ SOME = [A, B, C]
 def _final_kwargs_spec(plan):
     return plan[-1][1]
 
+
 def test_plan_and_build():
     plan = andi.plan(E, is_injectable=lambda x: True,
                      externally_provided={A})
-
     assert dict(plan[:2]).keys() == {A, B}
     assert list(dict(plan[:2]).values()) == [{}, {}]
     assert plan[2:] == [
@@ -53,15 +53,19 @@ def test_plan_and_build():
         (D, {'a': A, 'c': C}),
         (E, {'b': B, 'c': C, 'd': D})
     ]
+    assert plan.full_final_kwargs
     instances = build(plan, {A: ""})
     assert type(instances[E]) == E
 
 
 def test_cyclic_dependency():
-    andi.plan(E, is_injectable=lambda x: True,
+    plan = andi.plan(E, is_injectable=lambda x: True,
               externally_provided={A})  # No error if externally provided
-    with pytest.raises(andi.CyclicDependencyError):
+    with pytest.raises(andi.NonProvidableError):
         andi.plan(E, is_injectable=lambda x: True, externally_provided=[])
+    with pytest.raises(andi.NonProvidableError):
+        andi.plan(E, is_injectable=lambda x: True, externally_provided=[],
+                  full_final_kwargs=True)
 
 
 @pytest.mark.parametrize("cls,is_injectable,externally_provided", [
@@ -82,6 +86,9 @@ def test_plan_similar_for_class_or_func(cls, is_injectable, externally_provided)
 
     plan_func[-1] = (cls, plan_func[-1][1])  # To make plans compatible
     assert plan_cls == plan_func
+    assert plan_cls.full_final_kwargs
+    assert plan_cls.full_final_kwargs == plan_func.full_final_kwargs
+
 
     instances = build(plan_cls, external_deps)
     assert type(instances[cls]) == cls or instances[cls] == "external"
@@ -97,9 +104,11 @@ def test_cannot_be_provided():
 
     plan = andi.plan(WithC, is_injectable={B, C}, externally_provided={A})
     assert dict(plan) == {A: {}, B: {}, C: {'a': A, 'b': B}, WithC: {'c': C}}
+    assert plan.full_final_kwargs
 
     # partial plan also allowed (C is not required to be injectable):
-    andi.plan(WithC, is_injectable={B}, externally_provided={A})
+    plan = andi.plan(WithC, is_injectable={B}, externally_provided={A})
+    assert not plan.full_final_kwargs
 
     # But should fail on full_final_kwargs regimen
     with pytest.raises(andi.NonProvidableError):
@@ -109,7 +118,7 @@ def test_cannot_be_provided():
     # C is injectable, but A and B are not injectable. So an exception is raised:
     # every single injectable dependency found must be satisfiable.
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(WithC, is_injectable=[C])
+        andi.plan(WithC, is_injectable=[C], full_final_kwargs=True)
 
 
 def test_plan_with_optionals():
@@ -120,10 +129,12 @@ def test_plan_with_optionals():
     plan = andi.plan(fn, is_injectable={type(None), str},
                      externally_provided={str})
     assert plan ==  [(str, {}), (fn, {'a': str})]
+    assert plan.full_final_kwargs
 
     plan = andi.plan(fn, is_injectable={type(None)})
     assert plan.dependencies == [(type(None), {})]
     assert _final_kwargs_spec(plan) == {'a': type(None)}
+    assert plan.full_final_kwargs
 
     instances = build(plan)
     assert instances[type(None)] is None
@@ -143,21 +154,26 @@ def test_plan_with_union():
                      is_injectable={WithUnion, A, B},
                      externally_provided={A})
     assert plan == [(A, {}), (WithUnion, {'a_or_b': A})]
+    assert plan.full_final_kwargs
 
     plan = andi.plan(WithUnion,
                      is_injectable={WithUnion, B},
                      externally_provided={A})
     assert plan == [(A, {}), (WithUnion, {'a_or_b': A})]
+    assert plan.full_final_kwargs
 
     plan = andi.plan(WithUnion, is_injectable={WithUnion, B})
     assert plan == [(B, {}), (WithUnion, {'a_or_b': B})]
+    assert plan.full_final_kwargs
 
     plan = andi.plan(WithUnion, is_injectable={WithUnion},
                      externally_provided={B})
     assert plan == [(B, {}), (WithUnion, {'a_or_b': B})]
+    assert plan.full_final_kwargs
 
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(WithUnion, is_injectable={WithUnion}, full_final_kwargs=True)
+        andi.plan(WithUnion, is_injectable={WithUnion},
+                  full_final_kwargs=True)
 
     with pytest.raises(andi.NonProvidableError):
         andi.plan(WithUnion, is_injectable={}, full_final_kwargs=True)
@@ -192,6 +208,10 @@ def test_plan_with_optionals_and_union():
                      externally_provided={B})
     assert type(build(plan)[fn]) == B
 
+    plan = andi.plan(fn, is_injectable={})
+    assert plan == [(fn, {})]
+    assert not plan.full_final_kwargs
+
     with pytest.raises(NonProvidableError):
         andi.plan(fn, is_injectable={}, full_final_kwargs=True)
 
@@ -201,16 +221,19 @@ def test_externally_provided():
                      externally_provided=ALL)
     assert dict(plan.dependencies) == {B: {}, C: {}, D: {}}
     assert _final_kwargs_spec(plan) == {'b': B, 'c': C, 'd': D}
+    assert plan.full_final_kwargs
 
     plan = andi.plan(E.__init__, is_injectable=[],
                      externally_provided=ALL)
     assert dict(plan.dependencies) == {B: {}, C: {}, D: {}}
     assert _final_kwargs_spec(plan) == {'b': B, 'c': C, 'd': D}
+    assert plan.full_final_kwargs
 
     plan = andi.plan(E, is_injectable=ALL, externally_provided=ALL)
     assert plan == [(E, {})]
     assert _final_kwargs_spec(plan) == {}
     assert plan.dependencies == []
+    assert plan.full_final_kwargs
 
     plan = andi.plan(E, is_injectable=ALL,
                      externally_provided={A, B, C, D})
@@ -218,6 +241,7 @@ def test_externally_provided():
     assert plan[-1][0] == E
     assert _final_kwargs_spec(plan) == {'b': B, 'c': C, 'd': D}
     assert _final_kwargs_spec(plan) == plan[-1][1]
+    assert plan.full_final_kwargs
 
     plan = andi.plan(E, is_injectable=ALL,
                      externally_provided={A, B, D})
@@ -231,6 +255,7 @@ def test_externally_provided():
         assert plan_od[cls] == {}
     assert plan_od[C] == {'a': A, 'b': B}
     assert plan_od[E] == {'b': B, 'c': C, 'd': D}
+    assert plan.full_final_kwargs
 
 
 def test_plan_for_func():
@@ -242,6 +267,7 @@ def test_plan_for_func():
     plan = andi.plan(fn, is_injectable=ALL,
                      externally_provided={A})
     assert _final_kwargs_spec(plan) == {'e': E, 'c': C}
+    assert not plan.full_final_kwargs
     instances = build(plan.dependencies, {A: ""})
     fn(other="yeah!", **plan.final_kwargs(instances))
 
@@ -249,8 +275,8 @@ def test_plan_for_func():
         build(plan, {A: ""})
 
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(fn, is_injectable=ALL,
-                  externally_provided=[A], full_final_kwargs=True)
+        andi.plan(fn, is_injectable=ALL, externally_provided=[A],
+                  full_final_kwargs=True)
 
 
 def test_plan_non_annotated_args():
@@ -268,12 +294,14 @@ def test_plan_non_annotated_args():
 
     assert dict(plan.dependencies) == {A: {}, B: {}}
     assert _final_kwargs_spec(plan) == {'a': A, 'b': B}
+    assert not plan.full_final_kwargs
 
     plan_class = andi.plan(WithNonAnnArgs,
                            is_injectable=ALL,
                            externally_provided=[A])
     assert plan_class.dependencies == plan.dependencies
     assert _final_kwargs_spec(plan_class) == _final_kwargs_spec(plan)
+    assert not plan.full_final_kwargs
 
     with pytest.raises(TypeError):
         build(plan)
@@ -284,8 +312,8 @@ def test_plan_non_annotated_args():
     assert isinstance(o, WithNonAnnArgs)
 
     with pytest.raises(andi.NonProvidableError):
-        andi.plan(WithNonAnnArgs, is_injectable=ALL, externally_provided=[A],
-                  full_final_kwargs=True)
+        andi.plan(WithNonAnnArgs, is_injectable=ALL,
+                  externally_provided=[A], full_final_kwargs=True)
 
 
 @pytest.mark.parametrize("full_final_kwargs", [[True], [False]])
@@ -293,9 +321,9 @@ def test_plan_no_args(full_final_kwargs):
     def fn():
         return True
 
-    plan = andi.plan(fn, is_injectable=[],
-                     full_final_kwargs=full_final_kwargs)
+    plan = andi.plan(fn, is_injectable=[], full_final_kwargs=full_final_kwargs)
     assert plan == [(fn, {})]
+    assert plan.full_final_kwargs
     instances = build(plan)
     assert instances[fn]
     assert fn(**plan.final_kwargs(instances))
@@ -312,5 +340,6 @@ def test_plan_use_fn_as_annotations(full_final_kwargs):
 
     plan = andi.plan(fn, is_injectable=[fn_ann, B],
                      full_final_kwargs=full_final_kwargs)
+    assert plan.full_final_kwargs
     instances = build(plan)
     assert instances[fn].modified

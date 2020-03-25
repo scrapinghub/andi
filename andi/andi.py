@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from typing import (
     Dict, List, Optional, Type, Callable, Union, Container,
     get_type_hints, Tuple, cast, MutableMapping, Any, Mapping)
@@ -10,7 +10,7 @@ from andi.typeutils import (
     get_globalns,
     get_unannotated_params,
 )
-from andi.errors import CyclicDependencyError, NonProvidableError
+from andi.errors import NonProvidableError
 
 
 def inspect(func: Callable) -> Dict[str, List[Optional[Type]]]:
@@ -74,14 +74,23 @@ class Plan(List[Step]):
     ``Tuple[Callable, KwargsSpec]``. Note that
     ``KwargsSpec`` is almost a ``Dict[str, Callable]``
     so each step in the plan corresponds to
-    (callable_to_invoke, (param_name -> callable_to_build_the_param)).
+    (callable_to_invoke, (argument_name -> callable_to_build_the_argument)).
+
+    ``plan.full_final_kwargs`` is ``True`` if ``final_kwargs`` function
+    returns a ``kwargs`` dict containing absolutely all arguments required
+    to invoke the class/function. In other words, returned dict is not a
+    incomplete set of ``kwargs``.
     """
+
+    def __init__(self, *args, full_final_kwargs: bool = False, **kwargs):
+        self.full_final_kwargs = full_final_kwargs
+        super().__init__(*args, **kwargs)
 
     @property
     def dependencies(self) -> List[Step]:
         """
-        The plan required to build the dependencies for the
-        ``plan`` input function/class only.
+        The plan required to build the dependencies only for the
+        ``plan`` input function/class.
         Useful when it is known that not all dependencies for input
         function/class could be resolved. In such a case, it is convenient to
         execute the plan for the dependencies and then
@@ -114,7 +123,7 @@ def plan(class_or_func: Callable, *,
     the arguments of the given function or the arguments of its
     constructor if a class is given instead. In other words, this function
     makes dependency injection easy. Type annotations are used
-    to determine with instance must be built to satisfy the dependency.
+    to determine which instance must be built to satisfy the dependency.
 
     The plan is a sequence of steps.
     Each step in the plan is a tuple with:
@@ -162,7 +171,7 @@ def plan(class_or_func: Callable, *,
         plan = andi.plan(func, ...)
         instances = build(plan.dependencies)
         func(
-            other_arg='value, # argument that is out of the scope of dependency injection
+            other_arg='value, # argument that is provided manually
             **plan.final_kwargs(instances),
         )
 
@@ -173,7 +182,7 @@ def plan(class_or_func: Callable, *,
     argument (even if full_final_kwargs=False).
 
     This function recursively checks for dependencies. If a cyclic dependency
-    is found, ``CyclicDependencyError`` is raised.
+    is found, ``NonProvidableError`` is raised.
 
     See a full example in the following doctest:
 
@@ -202,9 +211,8 @@ def plan(class_or_func: Callable, *,
     ...    **plan_steps.final_kwargs(instances))
     'Called with a, b, non_annotated'
 
-    The returned plan when ``full_final_kwargs=True`` is given can be
-    directly built. See
-    the following example:
+    The returned plan can be directly built when ``full_final_kwargs=True``
+    is given. See the following example:
     >>> class C:
     ...     def __init__(self, a: A, b: B):
     ...         self.a = a
@@ -217,8 +225,10 @@ def plan(class_or_func: Callable, *,
     >>> assert c.a is instances[A]
     >>> assert c.b is instances[B]
     >>> assert c.b.a is instances[A] # Instance of A is reused (singleton)
+    >>> assert plan_steps.full_final_kwargs
 
-    :param func: Function to be inspected.
+
+    :param class_or_func: Class/Function to plan for building/invocation.
     :param is_injectable: A predicate or a container that says if a type
         is injectable. The planer is responsible to deal
         with all types that are injectable when traversing
@@ -228,7 +238,7 @@ def plan(class_or_func: Callable, *,
     :param externally_provided: A predicate or a dictionary that says if
         the value for the class/function will be provided externally.
         The planner won't try to resolve
-        its dependencies, so it acts as a way to stop dependency injection
+        its dependencies, so it acts as a way to stop dependency planning
         for these classes/functions where we don't want it because they will be
         provided by other means.
     :param full_final_kwargs: If the argument ``full_final_kwargs``
@@ -246,37 +256,32 @@ def plan(class_or_func: Callable, *,
     is_injectable = _ensure_can_provide_func(is_injectable)
     externally_provided = _ensure_can_provide_func(externally_provided)
 
-    plan_odict = _plan(class_or_func,
+    plan, _ = _plan(class_or_func,
                  is_injectable=is_injectable,
                  externally_provided=externally_provided,
                  full_final_kwargs=full_final_kwargs,
                  dependency_stack=None)
-    return Plan(plan_odict.items())
+    return plan
 
-
-_PlanDict = MutableMapping[Callable, KwargsSpec]
 
 def _plan(class_or_func: Callable, *,
           is_injectable: Callable[[Callable], bool],
           externally_provided: Callable[[Callable], bool],
           full_final_kwargs,
-          dependency_stack=None) -> _PlanDict:
+          dependency_stack=None) -> Tuple[Plan, List[str]]:
     dependency_stack = dependency_stack or []
-    plan_seq = OrderedDict()  # type: _PlanDict
+    is_root_call = not dependency_stack  # For better code reading
+    plan_od = OrderedDict()  # type: MutableMapping[Callable, KwargsSpec]
     type_for_arg = KwargsSpec()
 
     if externally_provided(class_or_func):
-        plan_seq[class_or_func] = KwargsSpec()
-        return plan_seq
+        return Plan([(class_or_func, KwargsSpec())], full_final_kwargs=True), []
 
-    if dependency_stack and not is_injectable(class_or_func):
-        raise NonProvidableError(
-            "Type {} cannot be provided".format(class_or_func))
+    # At this point the class/function must be injectable for non root cases
+    assert is_root_call or is_injectable(class_or_func)
 
     if class_or_func in dependency_stack:
-        raise CyclicDependencyError(
-            "Cyclic dependency found. Dependency graph: {}".format(
-                " -> ".join(map(str, dependency_stack + [class_or_func]))))
+        return Plan(), [_cyclic_dependency_error(class_or_func, dependency_stack)]
 
     dependency_stack = dependency_stack + [class_or_func]
 
@@ -287,33 +292,43 @@ def _plan(class_or_func: Callable, *,
     else:
         arguments = inspect(class_or_func)
 
+    args_errs = defaultdict(list)  # type: Dict[str, List[str]]
+    non_injectable_errs = defaultdict(list)  # type: Dict[str, List[str]]
     for argname, types in arguments.items():
         sel_cls = _select_type(types, is_injectable, externally_provided)
         if sel_cls is not None:
-            if sel_cls not in plan_seq:
-                plan = _plan(sel_cls,
+            if sel_cls not in plan_od:
+                plan, errors = _plan(sel_cls,
                              is_injectable=is_injectable,
                              externally_provided=externally_provided,
                              full_final_kwargs=True,
                              dependency_stack=dependency_stack)
-                plan_seq.update(plan)
-            type_for_arg[argname] = sel_cls
+                plan_od.update(plan)
+            if errors:
+                args_errs[argname].extend(errors)
+            else:
+                type_for_arg[argname] = sel_cls
         else:
-            if full_final_kwargs:
-                init_str = ".__init__()" if is_class else ""
-                if not types:
-                    msg = "Parameter '{}' is lacking annotations in " \
-                          "'{}{}'. Not possible to build a plan".format(
-                        argname, class_or_func, init_str)
-                else:
-                    msg = "Any of {} types are required ".format(types)
-                    msg += " for parameter '{}' ".format(argname)
-                    msg += " in '{}{}' but none can be provided".format(
-                        class_or_func, init_str)
-                raise NonProvidableError(msg)
+            if not types:
+                msg = _argument_lacking_annotation_error(argname, class_or_func)
+            else:
+                msg = _no_injectable_or_external_error(argname, class_or_func,
+                                                       types)
+            non_injectable_errs[argname].append(msg)
 
-    plan_seq[class_or_func] = type_for_arg
-    return plan_seq
+    # Error managing
+    if full_final_kwargs:
+        args_errs.update(non_injectable_errs)
+    if is_root_call and args_errs:
+        raise NonProvidableError(_exception_msg(class_or_func, args_errs))
+
+    # Plan filling
+    plan_od[class_or_func] = type_for_arg
+    plan = Plan(plan_od.items(), full_final_kwargs=not non_injectable_errs)
+    flatten_errors = [error
+                      for errors in args_errs.values()
+                      for error in errors]
+    return plan, flatten_errors
 
 
 def _select_type(types, is_injectable, externally_provided):
@@ -330,3 +345,44 @@ def _ensure_can_provide_func(cont_or_call: Optional[ContainerOrCallableType]
     if isinstance(cont_or_call, Container):
         return cont_or_call.__contains__
     return cont_or_call
+
+
+def _class_or_func_str(class_or_func):
+    init_str = ".__init__()" if isinstance(class_or_func, type) else ""
+    return "{}{}".format(class_or_func, init_str)
+
+
+# ------ Error messages section ------
+
+
+def _cyclic_dependency_error(class_or_func, dependency_stack):
+    error = "Cyclic dependency found. Dependency graph: {}".format(
+        " -> ".join(map(str, dependency_stack + [class_or_func])))
+    return error
+
+
+def _no_injectable_or_external_error(argname, class_or_func, types):
+    msg = "Any of {} types are required ".format(types)
+    msg += "for argument '{}' ".format(argname)
+    msg += "in '{}' ".format(_class_or_func_str(class_or_func))
+    msg += "but none of them is injectable or externally providable"
+    return msg
+
+
+def _argument_lacking_annotation_error(argname, class_or_func):
+    msg = "Parameter '{}' is lacking annotations in " \
+          "'{}'".format(
+        argname, _class_or_func_str(class_or_func))
+    return msg
+
+
+def _exception_msg(class_or_func, arg_errors):
+    msg = ""
+    for idx, (arg, errors) in enumerate(arg_errors.items()):
+        if idx > 0:
+            msg += "\n"
+        msg += "Not possible to generate a plan for argument "
+        msg += "'{}' in '{}'. ".format(arg, _class_or_func_str(class_or_func))
+        msg += "Causes:"
+        for idx, err in enumerate(errors):
+            msg += "\n    {}. {}".format(idx, err)
