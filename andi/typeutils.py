@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import sys
-from typing import Union, List, Callable, Dict
+import inspect
+from typing import Union, List, Callable, Dict, Container
 
 
 def is_union(tp) -> bool:
@@ -19,14 +20,8 @@ def is_union(tp) -> bool:
 
 
 def get_union_args(tp) -> List:
-    """ Return a list of typing.Union args.
-    NoneType objects are converted to None for simplicity.
-    """
-    return _none_type_to_none(tp.__args__)
-
-
-def _none_type_to_none(lst):
-    return [(el if el is not None.__class__ else None) for el in lst]
+    """ Return a list of typing.Union args. """
+    return list(tp.__args__)
 
 
 def issubclass_safe(cls, bases) -> bool:
@@ -44,6 +39,29 @@ def issubclass_safe(cls, bases) -> bool:
         return issubclass(cls, bases)
     except TypeError:
         return False
+
+
+def get_unannotated_params(func, annotations: Container) -> List[str]:
+    """ Return a list of ``func`` argument names which are not type annotated.
+
+    ``annotations`` should be a result of get_type_hints call for ``func``.
+
+    >>> from typing import get_type_hints
+    >>> def foo(x, y: str, *, z, w: int, **kwargs): pass
+    >>> annotations = get_type_hints(foo)
+    >>> get_unannotated_params(foo, annotations)
+    ['x', 'z']
+    """
+    ARGS_KWARGS = {
+        inspect.Parameter.VAR_POSITIONAL,  # *args argument
+        inspect.Parameter.VAR_KEYWORD      # **kwargs argument
+    }
+    res = []
+    for name, param in inspect.signature(func).parameters.items():
+        if name in annotations or param.kind in ARGS_KWARGS:
+            continue
+        res.append(name)
+    return res
 
 
 def get_globalns(func: Callable) -> Dict:
@@ -74,7 +92,7 @@ def _get_globalns_for_attrs(func: Callable) -> Dict:
     Also required to support attrs classes when
     ``from __future__ import annotations`` is used (default for python 4.0).
     See https://github.com/python-attrs/attrs/issues/593 """
-    if func.__module__ in sys.modules:
+    if getattr(func, '__module__', None) in sys.modules:
         return dict(sys.modules[func.__module__].__dict__)
     else:
         # Theoretically this can happen if someone writes

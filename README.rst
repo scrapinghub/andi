@@ -21,8 +21,8 @@ andi
 .. warning::
     Current status is "experimental".
 
-``andi`` tells which kwargs should to be passed to a callable, based
-on callable arguments' type annotations.
+``andi`` makes easy implementing custom dependency injection mechanisms
+where dependencies are expressed using type annotations.
 
 ``andi`` is useful as a building block for frameworks, or as a library
 which helps to implement dependency injection (thus the name -
@@ -39,230 +39,385 @@ Installation
 
 andi requires Python >= 3.5.3.
 
-Idea
+Goal
 ====
 
-``andi`` does a simple thing, but it requires some explanation why
-this thing is useful.
-
-You're building a framework. This framework has code which calls some
-user-defined function (callback). Callback receives arguments
-``foo`` and ``bar``:
+See the following classes that represents parts of a car
+(and the car itself):
 
 .. code-block:: python
 
-    def my_framework(callback):
-        # ... compute foo and bar somehow
-        result = callback(foo=foo, bar=bar)
-        # ...
+    class Valves:
+        pass
 
-Then you decide that you want the framework to be flexible,
-and support callbacks which take
+    class Engine:
+        def __init__(self, valves):
+            self.valves = valves
 
-* both ``foo`` and ``bar``,
-* only ``foo``,
-* only ``bar``,
-* nothing.
+    class Wheels:
+        pass
 
-If a callback only takes ``foo``, it may be unnecessary to compute ``bar``.
+    class Car:
+        def __init__(self, engine, wheels):
+            self.engine = engine
+            self.wheels = wheels
 
-In addition to that, you realize that there can be environments
-or implementations where ``foo`` is available for the framework,
-but ``bar`` isn't, but you still want to reuse the callbacks which
-work without ``bar``, and disable (or error) those who need ``bar``.
-
-So, the logic is the following:
-
-1. Framework defines which inputs are available, or can be possibly computed
-   (e.g. ``foo`` and ``bar``).
-2. Callback declares which inputs it receives (e.g. ``bar``).
-3. Framework inspects the callback, finds arguments the callback needs.
-4. Optional: if there are some arguments which callback needs,
-   but framework doesn't provide, an error is raised (or callback is disabled).
-5. Framework computes argument values (``bar`` in this case).
-6. Framework calls the callback.
-
-Depending on implementation, steps 1-5 may happen iteratevely - e.g.
-middlewares may be populating different parts of callback kwargs.
-In this case step (4 - raising an error) can be skipped.
-
-``andi`` is a library which helps to support this workflow.
-
-Usage
-=====
-
-``andi`` usage looks like this:
+The following would be the usual way of build a ``Car`` instance:
 
 .. code-block:: python
 
-    import andi
+    valves = Valves()
+    engine = Engine(valves)
+    wheels = Wheels()
+    car = Car(engine, wheels)
 
-    class Foo:
-        pass
+There are some dependencies between the classes: A car requires
+and engine and wheels to be built, as well as the engine requires
+valves. These are the car dependencies and sub-dependencies.
 
-    class Bar:
-        pass
-
-    class Baz:
-        pass
-
-
-    # use type annotations to declare which inputs a callback wants
-    def my_callback1(foo: Foo):
-        pass
-
-
-    def my_callback2(bar: Bar, foo: Foo):
-        pass
-
-
-    def my_framework(callback):
-        kwargs_to_provide = andi.to_provide(callback,
-                                            can_provide={Foo, Bar, None})
-        # for my_callback: kwargs_to_provide == {'foo': Foo}
-
-        # Create all the dependencies - implementation is framework-specific,
-        # and can be organized in different ways. Code below is an example.
-        kwargs = {}
-        for name, cls in kwargs_to_provide.items():
-            if cls is Foo:
-                kwargs[name] = Foo()
-            elif cls is Bar:
-                kwargs[name] = fetch_bar()
-            elif cls is None:
-                kwargs[name] = None
-            else:
-                raise Exception("Unexpected type")  # shouldn't really happen
-
-        # everything is ready, call the callback
-        result = callback(**kwargs)
-        # ...
-
-    my_framework(my_callback1)  # Foo instance is passed to my_callback1
-    my_framework(my_callback2)  # Bar and Foo instances are passed to my_callback2
-
-
-If a callback wants some input which framework can't provide,
-then some arguments are going to be  missing in kwargs,
-and Python can raise TypeError, as usual.
-It is possible to check it explicitly, to avoid doing unnecessary
-work creating values for other arguments:
+The question is, could we have an automatic way of building instances?
+For example, could we have a ``build`` function that
+given the ``Car`` class or any other class would return an instance
+even if the class itself has some other dependencies?
 
 .. code-block:: python
 
-    arguments = andi.inspect(callable)
-    kwargs_to_provide = andi.to_provide(arguments,
-                                        can_provide={Foo, Bar, None})
-    cant_provide = arguments.keys() - kwargs_to_provide.keys()
-    if cant_provide:
-        raise Exception("Can't provide arguments: %s" % cant_provide)
+    car = build(Car)  # Andi helps creating this generic build function
 
+``andi`` inspect the dependency tree and creates a plan making easy creating
+such a ``build`` function.
 
-``andi`` support typing.Union. If an argument is annotated
-as ``Union[Foo, Bar]``, it means "both Foo and Bar objects are fine,
-but callable prefers Foo":
+This is how this plan for the ``Car`` class would looks like:
+
+1. Invoke ``Valves`` with empty arguments
+2. Invoke ``Engine`` using the instance created in 1 as the argument ``valves``
+3. Invoke ``Wheels`` with empty arguments
+4. Invoke ``Cars`` with the instance created in 2 as the ``engine`` argument and with
+   the instance created in 3 as the ``wheels`` argument
+
+Type annotations
+----------------
+
+But there is a missing piece in the Car example before. How can
+``andi`` know that the class ``Valves`` is required to build the
+argument ``valves``? A first idea would be to use the argument
+name as a hint for the class name
+(as `pinject <https://pypi.org/project/pinject/>`_ does),
+but ``andi`` opts to rely on arguments' type annotations instead.
+
+The classes for ``Car`` should then be rewritten as:
 
 .. code-block:: python
 
-    def callback4(x: Union[Baz, Bar, Foo]):
+    class Valves:
         pass
 
-    # Bar is preferred to Foo, and Baz is not available, so my_framework passes
-    # Bar instance to ``x`` argument (``x = fetch_bar()``)
-    my_framework(callback4)
+    class Engine:
+        def __init__(self, valves: Valves):
+            self.valves = valves
 
-``andi`` also supports typing.Optional types. If an argument is annotated
-as optional, it means ``Union[<other types>, None]``. So usually framework
-specifies that None is OK, and provides it; None has the least priority:
-
-.. code-block:: python
-
-    def callback4(foo: Optional[Foo], baz: Optional[Baz]):
+    class Wheels:
         pass
 
-    # foo=Foo(), baz=None is passed, because my_framework
-    # supports Foo, but not Baz
-    my_framework(callback4)
+    class Car:
+        def __init__(self, engine: Engine, wheels: Wheels):
+            self.engine = engine
+            self.wheels = wheels
 
-``andi`` only checks type-annotated arguments; arguments without annotations
-are ignored.
+Note how now there is a explicit annotation stating that the
+``valves`` argument is of type ``Valves``
+(same for ``engine`` and ``wheels``).
 
-Constructor Dependency Injection
---------------------------------
-
-It is common for frameworks to ask users to define classes with a certain
-interface, not just callbacks. ``andi`` can be used like this:
+The ``andi.plan`` function can now create a plan to build the
+``Car`` class (ignore the ``is_injectable`` parameter by now):
 
 .. code-block:: python
 
-    class UserClass:
-        def __init__(self, foo: Foo):
-            self.foo = foo
-        # ...
+    plan = andi.plan(Car, is_injectable={Engine, Wheels, Valves})
 
-    class MyFramework:
-        # ...
-        def create_instance(self, user_cls):
-            kwargs_to_provide = andi.to_provide(user_cls.__init__,
-                                                can_provide={Foo, Bar})
-            # ... fill kwargs, based on ``kwargs_to_provide``
-            return user_cls(**kwargs)
 
-    obj = framework.create_instance(UserClass)
+This is what the ``plan`` variable contains:
 
-Pattern is the following:
+.. code-block:: python
 
-1) ask user classes to declare all dependencies in ``__init__`` method,
-2) then framework creates instances of these classes, passing all the
-   required dependencies.
+    [(Valves, {}),
+     (Engine, {'valves': Valves}),
+     (Wheels, {}),
+     (Car,    {'engine': Engine,
+               'wheels': Wheels})]
 
-Instead of ``__init__`` you can also use a classmethod.
+Note how this plan correspond exactly to the 4-steps plan described
+in the previous section.
 
-Recursive dependencies
+Building from the plan
 ----------------------
 
-``andi`` can be used on different levels in a framework. For example,
-framework supports callbacks which receive instances of
-some BaseClass subclasses:
+Creating a generic function to build the instances from
+a plan generated by ``andi`` is then very easy:
 
 .. code-block:: python
 
-    class UserClass(framework.BaseClass):
-        def __init__(self, foo: Foo):
-            self.foo = foo
+    def build(plan):
+        instances = {}
+        for fn_or_cls, kwargs_spec in plan:
+            instances[fn_or_cls] = fn_or_cls(**kwargs_spec.kwargs(instances))
+        return instances
 
-    def callback(user: UserClass):
-        # ...
+So let's see putting all the pieces together. The following code
+creates an instance of ``Car`` using ``andi``:
 
-    class MyFramework:
-        # ...
-        def create_instance(self, user_cls):
-            kwargs_to_provide = andi.to_provide(user_cls.__init__,
-                                                can_provide={Foo, Bar})
-            # ... fill kwargs, based on ``kwargs_to_provide``, i.e.
-            # create Foo and Bar objects somehow
-            return user_cls(**kwargs)
+.. code-block:: python
 
-        def call_callback(self, callback):
-            kwargs_to_provide = andi.to_provide(
-                callback,
-                can_provide=self.is_allowed_callback_argument
-            )
-            kwargs = {}
-            for name, user_cls in kwargs_to_provide.items():
-                kwargs[name] = self.create_instance(user_cls)
-            return callback(**kwargs)
+    plan = andi.plan(Car, is_injectable={Engine, Wheels, Valves})
+    instances = build(plan)
+    car = instances[Car]
 
-        def is_allowed_callback_argument(self, cls):
-            return issubclass(cls, framework.BaseClass)
+is_injectable
+-------------
 
-In this example callback needs a dependency (UserClass object), and UserClass
-object on itself has a dependency (Foo). So ``andi`` is used to find out these
-dependencies, and then framework creates Foo object first, then
-UserClass object, and then finally calls the callback.
+It is not always desired for ``andi`` to manage every single annotation found.
+Instead is usually better to explicitly declare which types
+can be handled by ``andi``. The argument ``is_injectable``
+allows to customize this feature.
 
-Implementation can be recursive as well, e.g. Foo may need some dependencies
-as well.
+``andi`` will raise an error on the presence of a dependency that cannot be resolved
+because it is not injectable.
+
+Usually is desirable to declare injectabilty by
+creating a base class to inherit from. For example,
+we could create a base class ``Injectable`` as base
+class for the car components:
+
+.. code-block:: python
+
+    class Injectable(ABC):
+        pass
+
+    class Valves(Injectable):
+        pass
+
+    class Engine(Injectable):
+        def __init__(self, valves: Valves):
+            self.valves = valves
+
+    class Wheels(Injectable):
+        pass
+
+The call to ``andi.plan`` would then be:
+
+.. code-block:: python
+
+    is_injectable = lambda cls: issubclass(cls, Injectable)
+    plan = andi.plan(Car, is_injectable=is_injectable)
+
+Functions and methods
+---------------------
+
+Dependency injection is also very useful when applied to functions.
+Imagine that you have a function ``drive`` that drives the ``Car``
+through the ``Road``:
+
+.. code-block:: python
+
+    class Road(Injectable):
+        ...
+
+    def drive(car: Car, road: Road, speed):
+        ... # Drive the car through the road
+
+The dependencies has to be resolved before invoking
+the ``drive`` function:
+
+.. code-block:: python
+
+    plan = andi.plan(drive, is_injectable=is_injectable)
+    instances = build(plan.dependencies)
+
+Now the ``drive`` function can be invoked:
+
+.. code-block:: python
+
+    drive(instances[Car], instances[Road], 100)
+
+Note that ``speed`` argument was not annotated. The resultant plan just won't include it
+because the ``andi.plan`` ``full_final_kwargs`` parameter is ``False``
+by default. Otherwise, an exception would have been raised (see ``full_final_kwargs`` argument
+documentation for more information).
+
+An alternative and more generic way to invoke the drive function
+would be:
+
+.. code-block:: python
+
+    drive(speed=100, **plan.final_kwargs(instances))
+
+dataclasses and attrs
+---------------------
+
+``andi`` supports classes defined using `attrs <https://www.attrs.org/>`_
+and also `dataclasses <https://docs.python.org/3/library/dataclasses.html>`_.
+For example the ``Car`` class could have been defined as:
+
+.. code-block:: python
+
+    # attrs class example
+    @attr.s(auto_attribs=True)
+    class Car:
+        engine: Engine
+        wheels: Wheels
+
+    # dataclass example
+    @dataclass
+    class Car(Injectable):
+        engine: Engine
+        wheels: Wheels
+
+Using ``attrs`` or ``dataclass`` is handy because they avoid
+some boilerplate.
+
+Externally provided dependencies
+--------------------------------
+
+Retaining the control over object instantiation
+could be desired in some cases. For example creating
+a database connection could require accessing some
+credentials registry or getting the connection from a pool
+so you might want to control building
+such instances outside of the regular
+dependency injection mechanism.
+
+``andi.plan`` allows to specify which types would be
+externally provided. Let's see an example:
+
+.. code-block:: python
+
+    class DBConnection(ABC):
+
+        @abstractmethod
+        def getConn():
+            pass
+
+    @dataclass
+    class UsersDAO:
+        conn: DBConnection
+
+        def getUsers():
+           return self.conn.query("SELECT * FROM USERS")
+
+``UsersDAO`` requires a database connection to run queries.
+But the connection will be provided externally from a pool, so we
+call then ``andi.plan`` using also the ``externally_provided``
+parameter:
+
+.. code-block:: python
+
+    plan = andi.plan(UsersDAO, is_injectable=is_injectable,
+                     externally_provided={DBConnection})
+
+The build method should then be modified slightly to be able
+to inject externally provided instances:
+
+.. code-block:: python
+
+    def build(plan, instances_stock=None):
+        instances_stock = instances_stock or {}
+        instances = {}
+        for fn_or_cls, kwargs_spec in plan:
+            if fn_or_cls in instances_stock:
+                instances[fn_or_cls] = instances_stock[fn_or_cls]
+            else:
+                instances[fn_or_cls] = fn_or_cls(**kwargs_spec.kwargs(instances))
+        return instances
+
+Now we are ready to create ``UserDAO`` instances with ``andi``:
+
+.. code-block:: python
+
+    plan = andi.plan(UsersDAO, is_injectable=is_injectable,
+                     externally_provided={DBConnection})
+    dbconnection = DBPool.get_connection()
+    instances = build(plan.dependencies, {DBConnection: dbconnection})
+    users_dao = instances[UsersDAO]
+    users = user_dao.getUsers()
+
+Note that being injectable is not required for externally provided
+dependencies.
+
+Optional
+--------
+
+``Optional`` type annotations can be used in case of
+dependencies that can be optional. For example:
+
+.. code-block:: python
+
+    @dataclass
+    class Dashboard:
+        conn: Optional[DBConnection]
+
+        def showPage():
+            if self.conn:
+                self.conn.query("INSERT INTO VISITS ...")
+            ...  # renders a HTML page
+
+In this example, the ``Dashboard`` class generates a HTML page to be served, and
+also stores the number of visits into a database. Database
+could be absent in some environments, but you might want
+the dashboard to work even if it cannot log the visits.
+
+When a database connection is possible the plan call would be:
+
+.. code-block:: python
+
+    plan = andi.plan(UsersDAO, is_injectable=is_injectable,
+                     externally_provided={DBConnection})
+
+
+And the following when the connection is absent:
+
+.. code-block:: python
+
+    plan = andi.plan(UsersDAO, is_injectable=is_injectable,
+                     externally_provided={})
+
+It is also required to register the type of ``None``
+as injectable. Otherwise ``andi.plan`` with raise an exception
+saying that "NoneType is not injectable".
+
+.. code-block:: python
+
+    Injectable.register(type(None))
+
+Union
+-----
+
+``Union`` can also be used to express alternatives. For example:
+
+.. code-block:: python
+
+    @dataclass
+    class UsersDAO:
+        conn: Union[ProductionDBConnection, DevelopmentDBConnection]
+
+``DevelopmentDBConnection`` will be injected in the absence of
+``ProductionDBConnection``.
+
+Full final kwargs mode
+-------------------------
+
+By default ``andi.plan`` won't fail if it is not able to provide
+some of the direct dependencies for the given input (see the
+``speed`` argument in one of the examples above).
+
+This behaviour is desired when inspecting functions
+for which is already known that some arguments won't be
+injectable but they will be provided by other means
+(like the ``drive`` function above).
+
+But in other cases is better to be sure that all dependencies
+are fulfilled and otherwise fail. Such is the case for classes.
+So it is recommended to set ``full_final_kwargs=True`` when invoking
+``andi.plan`` for classes.
 
 Why type annotations?
 ---------------------
@@ -308,18 +463,6 @@ and for html:
 
 This is more boilerplate though.
 
-You can also refactor ``parse`` to have a single argument:
-
-.. code-block:: python
-
-    @dataclass
-    class Response:
-        url: str
-        html: str
-
-    def parse(response: Response):
-        # ...
-
 Why doesn't andi handle creation of objects?
 --------------------------------------------
 
@@ -327,7 +470,7 @@ Currently ``andi`` just inspects callable and chooses best concrete types
 a framework needs to create and pass to a callable, without prescribing how
 to create them. This makes ``andi`` useful in various contexts - e.g.
 
-* creation of some objects may require asynchronous funnctions, and it
+* creation of some objects may require asynchronous functions, and it
   may depend on libraries used (asyncio, twisted, etc.)
 * in streaming architectures (e.g. based on Kafka) inspection may happen
   on one machine, while creation of objects may happen on different nodes
@@ -337,6 +480,159 @@ to create them. This makes ``andi`` useful in various contexts - e.g.
 It is hard to design API with enough flexibility for all such use cases.
 That said, ``andi`` may provide more helpers in future,
 once patterns emerge, even if they're useful only in certain contexts.
+
+Examples: callback based frameworks
+-----------------------------------
+
+Spider example
+**************
+
+Nothing better than a example to understand how ``andi`` can be useful.
+Let's imagine you want to implemented a callback based framework
+for writing spiders to crawl web pages.
+
+The basic idea is that there is framework in which the user
+can write spiders. Each spider is a collection of callbacks
+that can process data from a page, emit extracted data or request new
+pages. Then, there is an engine that takes care of downloading
+the web pages
+and invoking the user defined callbacks, chaining requests
+with its corresponding callback.
+
+Let's see an example of an spider to download recipes
+from a cooking page:
+
+.. code-block:: python
+
+    class MySpider(Spider):
+        start_url = "htttp://a_page_with_a_list_of_recipes"
+
+        def parse(self, response):
+            for url in recipes_urls_from_page(response)
+                yield Request(url, callback=parse_recipe)
+
+        def parse_recipe(self, response):
+            yield extract_recipe(response)
+
+
+It would be handy if the user can define some requirements
+just by annotating parameters in the callbacks. And ``andi`` make it
+possible.
+
+For example, a particular callback could require access to the cookies:
+
+.. code-block:: python
+
+    def parse(self, response: Response, cookies: CookieJar):
+        # ... Do something with the response and the cookies
+
+In this case, the engine can use ``andi`` to inspect the ``parse`` method, and
+detect that ``Response`` and ``CookieJar`` are required.
+Then the framework will build them and will invoke the callback.
+
+This functionality would serve to inject into the users callbacks
+some components only when they are required.
+
+It could also serve to encapsulate better the user code. For
+example, we could just decouple the recipe extraction into
+it's own class:
+
+.. code-block:: python
+
+    @dataclass
+    class RecipeExtractor:
+        response: Response
+
+        def to_item():
+            return extract_recipe(self.response)
+
+The callback could then be defined as:
+
+.. code-block:: python
+
+        def parse_recipe(extractor: RecipeExtractor):
+            yield extractor.to_item()
+
+Note how handy is that with ``andi`` the engine can create
+an instance of ``RecipesExtractor`` feeding it with the
+declared ``Response`` dependency.
+
+In definitive, using ``andi`` in such a framework
+can provide great flexibility to the user
+and reduce boilerplate.
+
+Web server example
+******************
+
+``andi`` can be useful also for implementing a new
+web framework.
+
+Let's imagine a framework where you can declare your sever in a
+class like the following:
+
+.. code-block:: python
+
+    class MyWeb(Server):
+
+        @route("/products")
+        def productspage(self, request: Request):
+            ... # return the composed page
+
+        @route("/sales")
+        def salespage(self, request: Request):
+            ... # return the composed page
+
+The former case is composed of two endpoints, one for serving
+a page with a summary of sales, and a second one to serve
+the products list.
+
+Connection to the database can be required
+to sever these pages. This logic could be encapsulated
+in some classes:
+
+.. code-block:: python
+
+    @dataclass
+    class Products:
+        conn: DBConnection
+
+        def get_products()
+            return self.conn.query("SELECT ...")
+
+    @dataclass
+    class Sales:
+        conn: DBConnection
+
+        def get_sales()
+            return self.conn.query("SELECT ...")
+
+Now ``productspage`` and ``salespage`` methods can just declare
+that they require these objects:
+
+.. code-block:: python
+
+    class MyWeb(Server):
+
+        @route("/products")
+        def productspage(self, request: Request, products: Products):
+            ... # return the composed page
+
+        @route("/sales")
+        def salespage(self, request: Request, sales: Sales):
+            ... # return the composed page
+
+And the framework can then be responsible to fulfill these
+dependencies. The flexibility offered would be a great advantage.
+As an example, if would be very easy to create a page that requires
+both sales and products:
+
+.. code-block:: python
+
+        @route("/overview")
+        def productspage(self, request: Request,
+                         products: Products, sales: Sales):
+            ... # return the composed overview page
+
 
 Contributing
 ============

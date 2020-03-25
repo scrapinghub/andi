@@ -9,4 +9,4 @@ def test_get_union_args():
 
 
 def test_get_union_args_optional():
-    assert get_union_args(Optional[Union[str, int]]) == [str, int, None]
+    assert get_union_args(Optional[Union[str, int]]) == [str, int, None.__class__]
