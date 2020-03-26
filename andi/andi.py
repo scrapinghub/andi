@@ -386,3 +386,4 @@ def _exception_msg(class_or_func, arg_errors):
         msg += "Causes:"
         for idx, err in enumerate(errors):
             msg += "\n    {}. {}".format(idx, err)
+    return msg
