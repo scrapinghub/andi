@@ -44,18 +44,17 @@ def _final_kwargs_spec(plan):
     return plan[-1][1]
 
 
-def identity(tag):
-    def iden(*args):
-        return (tag, ) + args
-
-    return iden
-
-
 @pytest.fixture
 def captured_errors(monkeypatch):
     """
     Return a dict that will capture the last errors raised by ``andi.plan``
     """
+    def identity(tag):
+        def iden_fn(*args):
+            return (tag,) + args
+
+        return iden_fn
+
     errors = {}
     def capture_errors(class_or_func, arg_errors):
         errors.clear()
