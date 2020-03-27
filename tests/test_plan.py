@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Union, Optional
 
 import pytest
@@ -6,7 +7,8 @@ import andi
 from andi import NonProvidableError
 from andi.andi import _class_or_func_str
 from tests.utils import build
-from collections import OrderedDict as OD
+from collections import OrderedDict
+
 
 class A:
 
@@ -32,7 +34,7 @@ class D:
 
 class E:
 
-    def __init__(self, b: B, c: C, d: D):
+    def __init__(self, d: D, c: C, b: B):
         pass
 
 
@@ -47,7 +49,7 @@ def _final_kwargs_spec(plan):
 @pytest.fixture
 def captured_errors(monkeypatch):
     """
-    Return a dict that will capture the last errors raised by ``andi.plan``
+    Return a list that will capture the last errors raised by ``andi.plan``
     """
     def identity(tag):
         def iden_fn(*args):
@@ -55,10 +57,13 @@ def captured_errors(monkeypatch):
 
         return iden_fn
 
-    errors = {}
+    errors = []
     def capture_errors(class_or_func, arg_errors):
         errors.clear()
-        errors.update(arg_errors)
+        # Sorting for determinism
+        errors.extend(sorted(arg_errors.items(), key=lambda t: t[0]))
+        for _, errs in errors:
+            errs.sort(key=str)
 
     monkeypatch.setattr(andi.andi, "_cyclic_dependency_error", identity('cyclic'))
     monkeypatch.setattr(andi.andi, "_no_injectable_or_external_error", identity('no_inj'))
@@ -88,14 +93,14 @@ def test_cyclic_dependency(captured_errors):
               externally_provided={A})  # No error if externally provided
     with pytest.raises(andi.NonProvidableError):
         andi.plan(E, is_injectable=lambda x: True, externally_provided=[])
-    expected_errors = {
-        'c': [('cyclic', E, [E, C, A])],
-        'd': [
+    expected_errors = [
+        ('c', [('cyclic', E, [E, C, A])]),
+        ('d', [
             ('cyclic', E, [E, D, A]),
             ('cyclic', E, [E, D, C, A]),
-        ]
-    }
-    assert captured_errors == expected_errors
+        ])
+    ]
+
     with pytest.raises(andi.NonProvidableError):
         andi.plan(E, is_injectable=lambda x: True, externally_provided=[],
                   full_final_kwargs=True)
@@ -105,7 +110,7 @@ def test_cyclic_dependency(captured_errors):
 @pytest.mark.parametrize("cls,is_injectable,externally_provided", [
     (E, ALL, SOME),
     (C, SOME, ALL),
-    (E, ALL, ALL)
+    (E, ALL, ALL),
 ])
 def test_plan_similar_for_class_or_func(cls, is_injectable, externally_provided):
     is_injectable = is_injectable + [cl.__init__ for cl in is_injectable]
@@ -148,18 +153,18 @@ def test_cannot_be_provided(captured_errors):
     with pytest.raises(andi.NonProvidableError):
         andi.plan(WithC, is_injectable={B}, externally_provided={A},
                   full_final_kwargs=True)
-    assert captured_errors == {'c': [('no_inj', 'c', WithC, [C])],}
+    assert captured_errors == [('c', [('no_inj', 'c', WithC, [C])],)]
 
     # C is injectable, but A and B are not injectable. So an exception is raised:
     # every single injectable dependency found must be satisfiable.
     with pytest.raises(andi.NonProvidableError):
         andi.plan(WithC, is_injectable=[C], full_final_kwargs=True)
-    assert captured_errors == {
-        'c': [
+    assert captured_errors == [
+        ('c', [
             ('no_inj', 'a', C, [A]),
             ('no_inj', 'b', C, [B]),
-        ],
-    }
+        ]),
+    ]
 
 
 def test_plan_with_optionals(captured_errors):
@@ -183,7 +188,7 @@ def test_plan_with_optionals(captured_errors):
 
     with pytest.raises(andi.NonProvidableError):
         andi.plan(fn, is_injectable={}, full_final_kwargs=True)
-    assert captured_errors == {'a': [('no_inj', 'a', fn, [str, type(None)])]}
+    assert captured_errors == [('a', [('no_inj', 'a', fn, [str, type(None)])])]
 
 
 def test_plan_with_union(captured_errors):
@@ -216,15 +221,15 @@ def test_plan_with_union(captured_errors):
     with pytest.raises(andi.NonProvidableError):
         andi.plan(WithUnion, is_injectable={WithUnion},
                   full_final_kwargs=True)
-    assert captured_errors == {
-        'a_or_b': [('no_inj', 'a_or_b', WithUnion, [A, B])]
-    }
+    assert captured_errors == [
+        ('a_or_b', [('no_inj', 'a_or_b', WithUnion, [A, B])])
+    ]
 
     with pytest.raises(andi.NonProvidableError):
         andi.plan(WithUnion, is_injectable={}, full_final_kwargs=True)
-    assert captured_errors == {
-        'a_or_b': [('no_inj', 'a_or_b', WithUnion, [A, B])]
-    }
+    assert captured_errors == [
+        ('a_or_b', [('no_inj', 'a_or_b', WithUnion, [A, B])])
+    ]
 
 
 def test_plan_with_optionals_and_union(captured_errors):
@@ -262,11 +267,11 @@ def test_plan_with_optionals_and_union(captured_errors):
 
     with pytest.raises(NonProvidableError):
         andi.plan(fn, is_injectable={}, full_final_kwargs=True)
-    assert captured_errors == {
-        'str_or_b_or_None': [
+    assert captured_errors == [
+        ('str_or_b_or_None', [
             ('no_inj', 'str_or_b_or_None', fn, [str, B, type(None)])
-        ]
-    }
+        ])
+    ]
 
 
 
@@ -299,7 +304,7 @@ def test_externally_provided():
 
     plan = andi.plan(E, is_injectable=ALL,
                      externally_provided={A, B, D})
-    plan_od = OD(plan)
+    plan_od = OrderedDict(plan)
     seq = list(plan_od.keys())
     assert seq.index(A) < seq.index(C)
     assert seq.index(B) < seq.index(C)
@@ -331,7 +336,7 @@ def test_plan_for_func(captured_errors):
     with pytest.raises(andi.NonProvidableError):
         andi.plan(fn, is_injectable=ALL, externally_provided=[A],
                   full_final_kwargs=True)
-    assert captured_errors == {'other': [('no_inj', 'other', fn, [str])]}
+    assert captured_errors == [('other', [('no_inj', 'other', fn, [str])])]
 
 
 
@@ -370,12 +375,12 @@ def test_plan_non_annotated_args(captured_errors):
     with pytest.raises(andi.NonProvidableError):
         andi.plan(WithNonAnnArgs, is_injectable=ALL,
                   externally_provided=[A], full_final_kwargs=True)
-    assert captured_errors == {
-        'non_ann': [('lack', 'non_ann', WithNonAnnArgs)],
-        'non_ann_def': [('lack', 'non_ann_def', WithNonAnnArgs)],
-        'non_ann_kw': [('lack', 'non_ann_kw', WithNonAnnArgs)],
-        'non_ann_kw_def': [('lack', 'non_ann_kw_def', WithNonAnnArgs)],
-    }
+    assert captured_errors == [
+        ('non_ann', [('lack', 'non_ann', WithNonAnnArgs)]),
+        ('non_ann_def', [('lack', 'non_ann_def', WithNonAnnArgs)]),
+        ('non_ann_kw', [('lack', 'non_ann_kw', WithNonAnnArgs)]),
+        ('non_ann_kw_def', [('lack', 'non_ann_kw_def', WithNonAnnArgs)]),
+    ]
 
 
 @pytest.mark.parametrize("full_final_kwargs", [[True], [False]])

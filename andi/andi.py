@@ -297,6 +297,7 @@ def _plan(class_or_func: Callable, *,
     for argname, types in arguments.items():
         sel_cls = _select_type(types, is_injectable, externally_provided)
         if sel_cls is not None:
+            errors = []
             if sel_cls not in plan_od:
                 plan, errors = _plan(sel_cls,
                              is_injectable=is_injectable,
@@ -323,7 +324,8 @@ def _plan(class_or_func: Callable, *,
         raise NonProvidableError(_exception_msg(class_or_func, args_errs))
 
     # Plan filling
-    plan_od[class_or_func] = type_for_arg
+    if not args_errs:
+        plan_od[class_or_func] = type_for_arg
     plan = Plan(plan_od.items(), full_final_kwargs=not non_injectable_errs)
     flatten_errors = [error
                       for errors in args_errs.values()
