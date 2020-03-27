@@ -20,7 +20,7 @@ def test_error_messages():
     })) == str
 
     with pytest.raises(Exception):
-        _exception_msg(E, {'arg': tuple('a', 'b')})
+        _exception_msg(E, {'arg': ('a', 'b')})
 
 
 def test_class_or_func_str():
