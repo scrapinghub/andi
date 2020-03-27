@@ -1,11 +1,11 @@
-from functools import partial
 from typing import Union, Optional
 
 import pytest
 
 import andi
 from andi import NonProvidableError
-from andi.andi import _class_or_func_str
+from andi.errors import CyclicDependencyErrCase, \
+    NonInjectableOrExternalErrCase, LackingAnnotationErrCase
 from tests.utils import build
 from collections import OrderedDict
 
@@ -46,30 +46,12 @@ def _final_kwargs_spec(plan):
     return plan[-1][1]
 
 
-@pytest.fixture
-def captured_errors(monkeypatch):
-    """
-    Return a list that will capture the last errors raised by ``andi.plan``
-    """
-    def identity(tag):
-        def iden_fn(*args):
-            return (tag,) + args
-
-        return iden_fn
-
-    errors = []
-    def capture_errors(class_or_func, arg_errors):
-        errors.clear()
-        # Sorting for determinism
-        errors.extend(sorted(arg_errors.items(), key=lambda t: t[0]))
-        for _, errs in errors:
-            errs.sort(key=str)
-
-    monkeypatch.setattr(andi.andi, "_cyclic_dependency_error", identity('cyclic'))
-    monkeypatch.setattr(andi.andi, "_no_injectable_or_external_error", identity('no_inj'))
-    monkeypatch.setattr(andi.andi, "_argument_lacking_annotation_error", identity('lack'))
-    monkeypatch.setattr(andi.andi, "_exception_msg", capture_errors)
-
+def error_causes(exec_info):
+    """ Return the error causes in a deterministic order """
+    errors = sorted(exec_info.value.errors_per_argument.items(),
+                    key=lambda t: t[0])
+    for _, errs in errors:
+        errs.sort(key=str)
     return errors
 
 
@@ -88,23 +70,24 @@ def test_plan_and_build():
     assert type(instances[E]) == E
 
 
-def test_cyclic_dependency(captured_errors):
+def test_cyclic_dependency():
     plan = andi.plan(E, is_injectable=lambda x: True,
               externally_provided={A})  # No error if externally provided
-    with pytest.raises(andi.NonProvidableError):
+    with pytest.raises(andi.NonProvidableError) as exec_info:
         andi.plan(E, is_injectable=lambda x: True, externally_provided=[])
     expected_errors = [
-        ('c', [('cyclic', E, [E, C, A])]),
+        ('c', [(CyclicDependencyErrCase(E, [E, C, A]))]),
         ('d', [
-            ('cyclic', E, [E, D, A]),
-            ('cyclic', E, [E, D, C, A]),
+            (CyclicDependencyErrCase(E, [E, D, A])),
+            (CyclicDependencyErrCase(E, [E, D, C, A])),
         ])
     ]
+    assert error_causes(exec_info) == expected_errors
 
-    with pytest.raises(andi.NonProvidableError):
+    with pytest.raises(andi.NonProvidableError) as exec_info:
         andi.plan(E, is_injectable=lambda x: True, externally_provided=[],
                   full_final_kwargs=True)
-    assert captured_errors == expected_errors
+    assert error_causes(exec_info) == expected_errors
 
 
 @pytest.mark.parametrize("cls,is_injectable,externally_provided", [
@@ -135,7 +118,7 @@ def test_plan_similar_for_class_or_func(cls, is_injectable, externally_provided)
     assert type(instances[cls]) == cls or instances[cls] == "external"
 
 
-def test_cannot_be_provided(captured_errors):
+def test_cannot_be_provided():
     class WithC:
 
         def __init__(self, c: C):
@@ -150,24 +133,25 @@ def test_cannot_be_provided(captured_errors):
     assert not plan.full_final_kwargs
 
     # But should fail on full_final_kwargs regimen
-    with pytest.raises(andi.NonProvidableError):
+    with pytest.raises(andi.NonProvidableError) as ex_info:
         andi.plan(WithC, is_injectable={B}, externally_provided={A},
                   full_final_kwargs=True)
-    assert captured_errors == [('c', [('no_inj', 'c', WithC, [C])],)]
+    assert error_causes(ex_info) == [('c', [
+        NonInjectableOrExternalErrCase('c', WithC, [C])],)]
 
     # C is injectable, but A and B are not injectable. So an exception is raised:
     # every single injectable dependency found must be satisfiable.
-    with pytest.raises(andi.NonProvidableError):
+    with pytest.raises(andi.NonProvidableError) as ex_info:
         andi.plan(WithC, is_injectable=[C], full_final_kwargs=True)
-    assert captured_errors == [
+    assert error_causes(ex_info) == [
         ('c', [
-            ('no_inj', 'a', C, [A]),
-            ('no_inj', 'b', C, [B]),
+            NonInjectableOrExternalErrCase('a', C, [A]),
+            NonInjectableOrExternalErrCase('b', C, [B]),
         ]),
     ]
 
 
-def test_plan_with_optionals(captured_errors):
+def test_plan_with_optionals():
     def fn(a: Optional[str]):
         assert a is None
         return "invoked!"
@@ -186,12 +170,13 @@ def test_plan_with_optionals(captured_errors):
     assert instances[type(None)] is None
     assert instances[fn] == "invoked!"
 
-    with pytest.raises(andi.NonProvidableError):
+    with pytest.raises(andi.NonProvidableError) as ex_info:
         andi.plan(fn, is_injectable={}, full_final_kwargs=True)
-    assert captured_errors == [('a', [('no_inj', 'a', fn, [str, type(None)])])]
+    assert error_causes(ex_info) == [
+        ('a', [NonInjectableOrExternalErrCase('a', fn, [str, type(None)])])]
 
 
-def test_plan_with_union(captured_errors):
+def test_plan_with_union():
     class WithUnion:
 
         def __init__(self, a_or_b: Union[A, B]):
@@ -218,21 +203,23 @@ def test_plan_with_union(captured_errors):
     assert plan == [(B, {}), (WithUnion, {'a_or_b': B})]
     assert plan.full_final_kwargs
 
-    with pytest.raises(andi.NonProvidableError):
+    with pytest.raises(andi.NonProvidableError) as ex_info:
         andi.plan(WithUnion, is_injectable={WithUnion},
                   full_final_kwargs=True)
-    assert captured_errors == [
-        ('a_or_b', [('no_inj', 'a_or_b', WithUnion, [A, B])])
+    assert error_causes(ex_info) == [
+        ('a_or_b',
+         [NonInjectableOrExternalErrCase('a_or_b', WithUnion, [A, B])])
     ]
 
-    with pytest.raises(andi.NonProvidableError):
+    with pytest.raises(andi.NonProvidableError) as ex_info:
         andi.plan(WithUnion, is_injectable={}, full_final_kwargs=True)
-    assert captured_errors == [
-        ('a_or_b', [('no_inj', 'a_or_b', WithUnion, [A, B])])
+    assert error_causes(ex_info) == [
+        ('a_or_b',
+         [NonInjectableOrExternalErrCase('a_or_b', WithUnion, [A, B])])
     ]
 
 
-def test_plan_with_optionals_and_union(captured_errors):
+def test_plan_with_optionals_and_union():
     def fn(str_or_b_or_None: Optional[Union[str, B]]):
         return str_or_b_or_None
 
@@ -265,11 +252,12 @@ def test_plan_with_optionals_and_union(captured_errors):
     assert plan == [(fn, {})]
     assert not plan.full_final_kwargs
 
-    with pytest.raises(NonProvidableError):
+    with pytest.raises(NonProvidableError) as ex_info:
         andi.plan(fn, is_injectable={}, full_final_kwargs=True)
-    assert captured_errors == [
+    assert error_causes(ex_info) == [
         ('str_or_b_or_None', [
-            ('no_inj', 'str_or_b_or_None', fn, [str, B, type(None)])
+            NonInjectableOrExternalErrCase('str_or_b_or_None', fn,
+                                           [str, B, type(None)])
         ])
     ]
 
@@ -317,7 +305,7 @@ def test_externally_provided():
     assert plan.full_final_kwargs
 
 
-def test_plan_for_func(captured_errors):
+def test_plan_for_func():
     def fn(other: str, e: E, c: C):
         assert other == 'yeah!'
         assert type(e) == E
@@ -333,14 +321,15 @@ def test_plan_for_func(captured_errors):
     with pytest.raises(TypeError):
         build(plan, {A: ""})
 
-    with pytest.raises(andi.NonProvidableError):
+    with pytest.raises(andi.NonProvidableError) as ex_info:
         andi.plan(fn, is_injectable=ALL, externally_provided=[A],
                   full_final_kwargs=True)
-    assert captured_errors == [('other', [('no_inj', 'other', fn, [str])])]
+    assert error_causes(ex_info) == [
+        ('other', [NonInjectableOrExternalErrCase('other', fn, [str])])]
 
 
 
-def test_plan_non_annotated_args(captured_errors):
+def test_plan_non_annotated_args():
     class WithNonAnnArgs:
 
         def __init__(self, a: A, b: B, non_ann, non_ann_def=0, *,
@@ -372,14 +361,17 @@ def test_plan_non_annotated_args(captured_errors):
                        **plan.final_kwargs(instances))
     assert isinstance(o, WithNonAnnArgs)
 
-    with pytest.raises(andi.NonProvidableError):
+    with pytest.raises(andi.NonProvidableError) as ex_info:
         andi.plan(WithNonAnnArgs, is_injectable=ALL,
                   externally_provided=[A], full_final_kwargs=True)
-    assert captured_errors == [
-        ('non_ann', [('lack', 'non_ann', WithNonAnnArgs)]),
-        ('non_ann_def', [('lack', 'non_ann_def', WithNonAnnArgs)]),
-        ('non_ann_kw', [('lack', 'non_ann_kw', WithNonAnnArgs)]),
-        ('non_ann_kw_def', [('lack', 'non_ann_kw_def', WithNonAnnArgs)]),
+    assert error_causes(ex_info) == [
+        ('non_ann', [LackingAnnotationErrCase('non_ann', WithNonAnnArgs)]),
+        ('non_ann_def', [LackingAnnotationErrCase('non_ann_def',
+                                                  WithNonAnnArgs)]),
+        ('non_ann_kw', [LackingAnnotationErrCase('non_ann_kw',
+                                                 WithNonAnnArgs)]),
+        ('non_ann_kw_def', [LackingAnnotationErrCase('non_ann_kw_def',
+                                                     WithNonAnnArgs)]),
     ]
 
 
@@ -410,20 +402,3 @@ def test_plan_use_fn_as_annotations(full_final_kwargs):
     assert plan.full_final_kwargs
     instances = build(plan)
     assert instances[fn].modified
-
-
-def test_class_or_func_str():
-    assert _class_or_func_str(E) == "<class 'tests.test_plan.E'>.__init__()"
-    fn_str = _class_or_func_str(test_class_or_func_str)
-    assert fn_str.startswith("<function test_class_or_func_str")
-    assert fn_str.endswith(">")
-
-
-def test_error_messages():
-    assert type(andi.andi._cyclic_dependency_error(E, [E,A,E])) == str
-    assert type(andi.andi._argument_lacking_annotation_error('arg', E)) == str
-    assert type(andi.andi._no_injectable_or_external_error('args', E, [A,E])) == str
-    assert type(andi.andi._exception_msg(E, {
-        'a': ['msg1', 'msg2'],
-        'b': ['msg3', 'msg4'],
-    })) == str
