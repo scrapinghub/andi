@@ -297,7 +297,7 @@ def _plan(class_or_func: Callable, *,
     for argname, types in arguments.items():
         sel_cls = _select_type(types, is_injectable, externally_provided)
         if sel_cls is not None:
-            errors = []
+            errors = []  # type: List[str]
             if sel_cls not in plan_od:
                 plan, errors = _plan(sel_cls,
                              is_injectable=is_injectable,
