@@ -10,7 +10,8 @@ from andi.typeutils import (
     get_globalns,
     get_unannotated_params,
 )
-from andi.errors import NonProvidableError
+from andi.errors import NonProvidableError, CyclicDependencyErrCase, \
+    LackingAnnotationErrCase, NonInjectableOrExternalErrCase
 
 
 def inspect(func: Callable) -> Dict[str, List[Optional[Type]]]:
@@ -268,7 +269,7 @@ def _plan(class_or_func: Callable, *,
           is_injectable: Callable[[Callable], bool],
           externally_provided: Callable[[Callable], bool],
           full_final_kwargs,
-          dependency_stack=None) -> Tuple[Plan, List[str]]:
+          dependency_stack=None) -> Tuple[Plan, List[Tuple]]:
     dependency_stack = dependency_stack or []
     is_root_call = not dependency_stack  # For better code reading
     plan_od = OrderedDict()  # type: MutableMapping[Callable, KwargsSpec]
@@ -281,7 +282,7 @@ def _plan(class_or_func: Callable, *,
     assert is_root_call or is_injectable(class_or_func)
 
     if class_or_func in dependency_stack:
-        return Plan(), [_cyclic_dependency_error(class_or_func, dependency_stack)]
+        return Plan(), [CyclicDependencyErrCase(class_or_func, dependency_stack)]
 
     dependency_stack = dependency_stack + [class_or_func]
 
@@ -292,11 +293,12 @@ def _plan(class_or_func: Callable, *,
     else:
         arguments = inspect(class_or_func)
 
-    args_errs = defaultdict(list)  # type: Dict[str, List[str]]
-    non_injectable_errs = defaultdict(list)  # type: Dict[str, List[str]]
+    args_errs = defaultdict(list)  # type: Dict[str, List[Tuple]]
+    non_injectable_errs = defaultdict(list)  # type: Dict[str, List[Tuple]]
     for argname, types in arguments.items():
         sel_cls = _select_type(types, is_injectable, externally_provided)
         if sel_cls is not None:
+            errors = []  # type: List[Tuple]
             if sel_cls not in plan_od:
                 plan, errors = _plan(sel_cls,
                              is_injectable=is_injectable,
@@ -310,20 +312,21 @@ def _plan(class_or_func: Callable, *,
                 type_for_arg[argname] = sel_cls
         else:
             if not types:
-                msg = _argument_lacking_annotation_error(argname, class_or_func)
+                err_case = LackingAnnotationErrCase(argname, class_or_func)  # type: Tuple
             else:
-                msg = _no_injectable_or_external_error(argname, class_or_func,
-                                                       types)
-            non_injectable_errs[argname].append(msg)
+                err_case = NonInjectableOrExternalErrCase(argname, class_or_func,
+                                                          types)
+            non_injectable_errs[argname].append(err_case)
 
     # Error managing
     if full_final_kwargs:
         args_errs.update(non_injectable_errs)
     if is_root_call and args_errs:
-        raise NonProvidableError(_exception_msg(class_or_func, args_errs))
+        raise NonProvidableError(class_or_func, args_errs)
 
     # Plan filling
-    plan_od[class_or_func] = type_for_arg
+    if not args_errs:
+        plan_od[class_or_func] = type_for_arg
     plan = Plan(plan_od.items(), full_final_kwargs=not non_injectable_errs)
     flatten_errors = [error
                       for errors in args_errs.values()
@@ -345,44 +348,3 @@ def _ensure_can_provide_func(cont_or_call: Optional[ContainerOrCallableType]
     if isinstance(cont_or_call, Container):
         return cont_or_call.__contains__
     return cont_or_call
-
-
-def _class_or_func_str(class_or_func):
-    init_str = ".__init__()" if isinstance(class_or_func, type) else ""
-    return "{}{}".format(class_or_func, init_str)
-
-
-# ------ Error messages section ------
-
-
-def _cyclic_dependency_error(class_or_func, dependency_stack):
-    error = "Cyclic dependency found. Dependency graph: {}".format(
-        " -> ".join(map(str, dependency_stack + [class_or_func])))
-    return error
-
-
-def _no_injectable_or_external_error(argname, class_or_func, types):
-    msg = "Any of {} types are required ".format(types)
-    msg += "for argument '{}' ".format(argname)
-    msg += "in '{}' ".format(_class_or_func_str(class_or_func))
-    msg += "but none of them is injectable or externally providable"
-    return msg
-
-
-def _argument_lacking_annotation_error(argname, class_or_func):
-    msg = "Parameter '{}' is lacking annotations in " \
-          "'{}'".format(
-        argname, _class_or_func_str(class_or_func))
-    return msg
-
-
-def _exception_msg(class_or_func, arg_errors):
-    msg = ""
-    for idx, (arg, errors) in enumerate(arg_errors.items()):
-        if idx > 0:
-            msg += "\n"
-        msg += "Not possible to generate a plan for argument "
-        msg += "'{}' in '{}'. ".format(arg, _class_or_func_str(class_or_func))
-        msg += "Causes:"
-        for idx, err in enumerate(errors):
-            msg += "\n    {}. {}".format(idx, err)
