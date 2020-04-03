@@ -1,6 +1,13 @@
 Changes
 =======
 
+0.3.0 (2020-04-03)
+------------------
+
+* ``andi.plan`` function introduced, replacing ``andi.to_provide``.
+* Rewritten README explaining the new approach based in ``plan`` method.
+* ``andi.inspect`` returning non annotated arguments also.
+
 0.2.0 (2020-02-14)
 ------------------
 
