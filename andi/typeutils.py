@@ -2,6 +2,7 @@
 import sys
 import inspect
 import types
+import functools
 from typing import Union, List, Callable, Dict, Container, cast, Type
 
 
@@ -141,8 +142,13 @@ def get_callable_func_obj(class_or_func: Callable) -> Callable:
         # not to use it, as get_type_hints support these objects as-is
         if isinstance(class_or_func, _FUNCTION_TYPES):
             return class_or_func
+        if isinstance(class_or_func, functools.partial):
+            raise NotImplementedError(
+                "functools.partial support is not implemented; "
+                "%r is passed" % (class_or_func,)
+            )
         if hasattr(class_or_func, "__call__"):
             return class_or_func.__call__  # type: ignore
         else:
             # not sure how to trigger it
-            raise TypeError("Unexpected callable object %r" % class_or_func)
+            raise TypeError("Unexpected callable object %r" % (class_or_func,))
