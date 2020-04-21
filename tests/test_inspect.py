@@ -90,6 +90,7 @@ def test_init_methods():
             self.x = x
 
     assert andi.inspect(MyClass.__init__) == {'x': [Foo]}
+    assert andi.inspect(MyClass) == {'x': [Foo]}
 
 
 def test_classmethod():
@@ -115,3 +116,12 @@ def test_decorated():
         pass
 
     assert andi.inspect(func) == {'x': [Bar]}
+
+
+def test_callable_object():
+    class MyClass:
+        def __call__(self, x: Bar):
+            pass
+
+    obj = MyClass()
+    assert andi.inspect(obj) == {'x': [Bar]}

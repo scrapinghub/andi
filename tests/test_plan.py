@@ -400,3 +400,13 @@ def test_plan_use_fn_as_annotations(full_final_kwargs):
     assert plan.full_final_kwargs
     instances = build(plan)
     assert instances[fn].modified
+
+
+def test_plan_callable_object():
+    class MyFunc:
+        def __call__(self, b: B):
+            pass
+
+    func = MyFunc()
+    plan = andi.plan(func, is_injectable={B})
+    assert plan == [(B, {}), (func, {'b': B})]
