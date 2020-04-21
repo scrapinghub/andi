@@ -262,7 +262,6 @@ def test_plan_with_optionals_and_union():
     ]
 
 
-
 def test_externally_provided():
     plan = andi.plan(E.__init__, is_injectable=ALL,
                      externally_provided=ALL)
@@ -326,7 +325,6 @@ def test_plan_for_func():
                   full_final_kwargs=True)
     assert error_causes(ex_info) == [
         ('other', [NonInjectableOrExternalErrCase('other', fn, [str])])]
-
 
 
 def test_plan_non_annotated_args():

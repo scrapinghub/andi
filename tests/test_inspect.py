@@ -20,8 +20,6 @@ class Baz:
 
 
 def test_andi():
-    possible = {Foo, Bar, Baz}
-
     def func1(x: Foo):
         pass
 
