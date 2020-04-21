@@ -52,7 +52,6 @@ def test_get_callable_func_obj_class():
         get_callable_func_obj(foo)
 
 
-@pytest.mark.xfail(reason="TODO: figure out what's the correct behavior")
 def test_get_callable_func_classmethods():
     class Foo:
         @classmethod
@@ -61,8 +60,8 @@ def test_get_callable_func_classmethods():
 
     foo = Foo()
 
-    assert get_callable_func_obj(Foo.clsmeth) is Foo.clsmeth
-    assert get_callable_func_obj(foo.clsmeth) is foo.clsmeth
+    assert get_callable_func_obj(Foo.clsmeth) == Foo.clsmeth
+    assert get_callable_func_obj(foo.clsmeth) == foo.clsmeth
 
 
 def test_get_callable_func_obj_call():
