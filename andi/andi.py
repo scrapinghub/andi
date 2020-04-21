@@ -2,7 +2,7 @@
 from collections import OrderedDict, defaultdict
 from typing import (
     Dict, List, Optional, Type, Callable, Union, Container,
-    get_type_hints, Tuple, cast, MutableMapping, Any, Mapping)
+    get_type_hints, Tuple, MutableMapping, Any, Mapping)
 
 from andi.typeutils import (
     get_union_args,
@@ -11,8 +11,12 @@ from andi.typeutils import (
     get_unannotated_params,
     get_callable_func_obj,
 )
-from andi.errors import NonProvidableError, CyclicDependencyErrCase, \
-    LackingAnnotationErrCase, NonInjectableOrExternalErrCase
+from andi.errors import (
+    NonProvidableError,
+    CyclicDependencyErrCase,
+    LackingAnnotationErrCase,
+    NonInjectableOrExternalErrCase
+)
 
 
 def inspect(class_or_func: Callable) -> Dict[str, List[Optional[Type]]]:
