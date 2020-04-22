@@ -262,7 +262,6 @@ def test_plan_with_optionals_and_union():
     ]
 
 
-
 def test_externally_provided():
     plan = andi.plan(E.__init__, is_injectable=ALL,
                      externally_provided=ALL)
@@ -326,7 +325,6 @@ def test_plan_for_func():
                   full_final_kwargs=True)
     assert error_causes(ex_info) == [
         ('other', [NonInjectableOrExternalErrCase('other', fn, [str])])]
-
 
 
 def test_plan_non_annotated_args():
@@ -402,3 +400,13 @@ def test_plan_use_fn_as_annotations(full_final_kwargs):
     assert plan.full_final_kwargs
     instances = build(plan)
     assert instances[fn].modified
+
+
+def test_plan_callable_object():
+    class MyFunc:
+        def __call__(self, b: B):
+            pass
+
+    func = MyFunc()
+    plan = andi.plan(func, is_injectable={B})
+    assert plan == [(B, {}), (func, {'b': B})]

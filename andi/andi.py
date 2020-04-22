@@ -2,24 +2,37 @@
 from collections import OrderedDict, defaultdict
 from typing import (
     Dict, List, Optional, Type, Callable, Union, Container,
-    get_type_hints, Tuple, cast, MutableMapping, Any, Mapping)
+    get_type_hints, Tuple, MutableMapping, Any, Mapping)
 
 from andi.typeutils import (
     get_union_args,
     is_union,
     get_globalns,
     get_unannotated_params,
+    get_callable_func_obj,
 )
-from andi.errors import NonProvidableError, CyclicDependencyErrCase, \
-    LackingAnnotationErrCase, NonInjectableOrExternalErrCase
+from andi.errors import (
+    NonProvidableError,
+    CyclicDependencyErrCase,
+    LackingAnnotationErrCase,
+    NonInjectableOrExternalErrCase
+)
 
 
-def inspect(func: Callable) -> Dict[str, List[Optional[Type]]]:
+def inspect(class_or_func: Callable) -> Dict[str, List[Optional[Type]]]:
     """
-    For each argument of the ``func`` return a list of possible types.
+    For each argument of the ``class_or_func`` return a list of possible types.
     Non annotated arguments are also returned with an empty list of possible
     types.
+
+    ``class_or_func`` can be
+
+    * a function
+    * a class - in this case ``cls.__init__`` annotations are returned
+    * a callable object - in this case ``obj.__call__`` annotations
+      are returned
     """
+    func = get_callable_func_obj(class_or_func)
     globalns = get_globalns(func)
     annotations = get_type_hints(func, globalns)
     for name in get_unannotated_params(func, annotations):
@@ -285,13 +298,7 @@ def _plan(class_or_func: Callable, *,
         return Plan(), [CyclicDependencyErrCase(class_or_func, dependency_stack)]
 
     dependency_stack = dependency_stack + [class_or_func]
-
-    is_class = isinstance(class_or_func, type)
-    if is_class:
-        cls = cast(Type, class_or_func)
-        arguments = inspect(cls.__init__)
-    else:
-        arguments = inspect(class_or_func)
+    arguments = inspect(class_or_func)
 
     args_errs = defaultdict(list)  # type: Dict[str, List[Tuple]]
     non_injectable_errs = defaultdict(list)  # type: Dict[str, List[Tuple]]

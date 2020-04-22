@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 import sys
 import inspect
-from typing import Union, List, Callable, Dict, Container
+import types
+import functools
+from typing import Union, List, Callable, Dict, Container, cast, Type
 
 
 def is_union(tp) -> bool:
@@ -101,3 +103,52 @@ def _get_globalns_for_attrs(func: Callable) -> Dict:
         # (w.r.t. typing.get_type_hints) but will still function
         # correctly.
         return {}
+
+
+def _get_function_types():
+    # from typing module (near get_type_hints), but without ModuleType
+    _function_types = [
+        types.FunctionType,
+        types.BuiltinFunctionType,
+        types.MethodType,
+    ]
+
+    # Python < 3.7 compatibility
+    for name in ['WrapperDescriptorType', 'MethodWrapperType', 'MethodDescriptorType']:
+        if hasattr(types, name):
+            _function_types.append(getattr(types, name))
+
+    return tuple(_function_types)
+
+
+_FUNCTION_TYPES = _get_function_types()
+
+
+def get_callable_func_obj(class_or_func: Callable) -> Callable:
+    """
+    Return a function/method which will be invoked
+    when func(...) is called. The resulting object should be
+    supported by ``get_type_hints``.
+    """
+    if not callable(class_or_func):
+        raise TypeError("%r is not callable" % (class_or_func,))
+    is_class = isinstance(class_or_func, type)
+    if is_class:
+        cls = cast(Type, class_or_func)
+        return cls.__init__
+    else:
+        # we need to check some exact types, because some function-like
+        # object also have __call__ method, while it is better
+        # not to use it, as get_type_hints support these objects as-is
+        if isinstance(class_or_func, _FUNCTION_TYPES):
+            return class_or_func
+        if isinstance(class_or_func, functools.partial):
+            raise NotImplementedError(
+                "functools.partial support is not implemented; "
+                "%r is passed" % (class_or_func,)
+            )
+        if hasattr(class_or_func, "__call__"):
+            return class_or_func.__call__  # type: ignore
+        else:
+            # not sure how to trigger it
+            raise TypeError("Unexpected callable object %r" % (class_or_func,))

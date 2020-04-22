@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from functools import wraps
+from functools import wraps, partial
 from typing import Union, Optional, TypeVar, Type
 
 import pytest
@@ -20,8 +20,6 @@ class Baz:
 
 
 def test_andi():
-    possible = {Foo, Bar, Baz}
-
     def func1(x: Foo):
         pass
 
@@ -92,6 +90,7 @@ def test_init_methods():
             self.x = x
 
     assert andi.inspect(MyClass.__init__) == {'x': [Foo]}
+    assert andi.inspect(MyClass) == {'x': [Foo]}
 
 
 def test_classmethod():
@@ -117,3 +116,21 @@ def test_decorated():
         pass
 
     assert andi.inspect(func) == {'x': [Bar]}
+
+
+@pytest.mark.xfail(reason="functools.partial support is not implemented")
+def test_partial():
+    def func(x: Foo, y: Bar):
+        pass
+
+    func_nofoo = partial(func, x=Foo())
+    assert andi.inspect(func_nofoo) == {'y': [Bar]}
+
+
+def test_callable_object():
+    class MyClass:
+        def __call__(self, x: Bar):
+            pass
+
+    obj = MyClass()
+    assert andi.inspect(obj) == {'x': [Bar]}
