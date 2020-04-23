@@ -1,6 +1,14 @@
 Changes
 =======
 
+0.4.0 (2020-04-23)
+------------------
+
+* ``andi.inspect`` can handle classes now (their ``__init__`` method
+  is inspected)
+* ``andi.plan`` and ``andi.inspect`` can handle objects which are
+  callable via ``__call__`` method.
+
 0.3.0 (2020-04-03)
 ------------------
 
