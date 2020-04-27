@@ -35,5 +35,5 @@ deploy:
   on:
     tags: true
     repo: scrapinghub/andi
-    condition: $TOXENV == py37
+    condition: "$TOXENV = py38"
   distributions: "sdist bdist_wheel"
