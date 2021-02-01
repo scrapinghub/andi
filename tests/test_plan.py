@@ -410,3 +410,33 @@ def test_plan_callable_object():
     func = MyFunc()
     plan = andi.plan(func, is_injectable={B})
     assert plan == [(B, {}), (func, {'b': B})]
+
+
+def test_plan_overrides():
+    plan = andi.plan(A, is_injectable=ALL, overrides={A: B}.get)
+    assert plan == [(B, {})]
+    plan = andi.plan(C, is_injectable=ALL, overrides={A: B}.get)
+    assert plan == [(B, {}), (C, {'a': B, 'b': B})]
+    plan = andi.plan(C, is_injectable=ALL, externally_provided=[A],
+                               overrides={A: B, B: A}.get)
+    assert plan == [(B, {}), (A, {}), (C, {'a': B, 'b': A})]
+
+    # Check overriding stops in children of the overridden node
+    plan = andi.plan(C, is_injectable=ALL, externally_provided=[A],
+                               overrides={C: D}.get)
+    plan2 = andi.plan(C, is_injectable=ALL, externally_provided=[A],
+                               overrides={C: D, A: B}.get)
+    assert plan2 == plan
+    assert plan == [(A, {}), (B, {}), (C, {'a': A, 'b': B}), (D, {'a': A, 'c': C})]
+
+    # Check cycle detection
+    with pytest.raises(NonProvidableError) as exec_info:
+        andi.plan(C, is_injectable=ALL, overrides={A: C}.get)
+    expected_errors = [
+        ('a', [(CyclicDependencyErrCase(C, [C]))])
+    ]
+    assert error_causes(exec_info) == expected_errors
+
+    # Check non injectable override
+    with pytest.raises(NonProvidableError):
+        andi.plan(C, is_injectable=ALL, overrides={A: str}.get, full_final_kwargs=True)
