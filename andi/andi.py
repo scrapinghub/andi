@@ -270,16 +270,15 @@ def plan(class_or_func: Callable, *,
     """
     is_injectable = _ensure_can_provide_func(is_injectable)
     externally_provided = _ensure_can_provide_func(externally_provided)
-    overrides = overrides or (lambda x: None)
-    class_or_func, under_override = _may_override(class_or_func, overrides, False)
+    overrides = overrides or _empty_overrides
+    class_or_func, overrides = _may_override(class_or_func, overrides)
 
     plan, _ = _plan(class_or_func,
                     is_injectable=is_injectable,
                     externally_provided=externally_provided,
                     full_final_kwargs=full_final_kwargs,
                     dependency_stack=None,
-                    overrides=overrides,
-                    under_override=under_override)
+                    overrides=overrides)
     return plan
 
 
@@ -288,8 +287,7 @@ def _plan(class_or_func: Callable, *,
           externally_provided: Callable[[Callable], bool],
           full_final_kwargs,
           dependency_stack=None,
-          overrides: Callable[[Type], Optional[Type]],
-          under_override: bool
+          overrides: Callable[[Type], Optional[Type]]
           ) -> Tuple[Plan, List[Tuple]]:
     dependency_stack = dependency_stack or []
     is_root_call = not dependency_stack  # For better code reading
@@ -311,7 +309,7 @@ def _plan(class_or_func: Callable, *,
     args_errs = defaultdict(list)  # type: Dict[str, List[Tuple]]
     non_injectable_errs = defaultdict(list)  # type: Dict[str, List[Tuple]]
     for argname, types in arguments.items():
-        sel_cls, arg_under_override = _select_type(types, is_injectable, externally_provided, overrides, under_override)
+        sel_cls, arg_overrides = _select_type(types, is_injectable, externally_provided, overrides)
         if sel_cls is not None:
             errors = []  # type: List[Tuple]
             if sel_cls not in plan_od:
@@ -320,8 +318,7 @@ def _plan(class_or_func: Callable, *,
                                      externally_provided=externally_provided,
                                      full_final_kwargs=True,
                                      dependency_stack=dependency_stack,
-                                     overrides=overrides,
-                                     under_override=arg_under_override)
+                                     overrides=arg_overrides)
                 plan_od.update(plan)
             if errors:
                 args_errs[argname].extend(errors)
@@ -354,27 +351,36 @@ def _plan(class_or_func: Callable, *,
 def _select_type(types,
                  is_injectable,
                  externally_provided,
-                 overrides: Callable,
-                 under_override: bool
-                 ) -> Tuple[Optional[Callable], bool]:
+                 overrides: Callable
+                 ) -> Tuple[Optional[Callable], Callable]:
     """
     Choose the first type that can be provided. None otherwise. Also return
     a boolean to keep track of overriding status.
     """
     for candidate in types:
-        candidate, new_under_override = _may_override(candidate, overrides, under_override)
+        candidate, new_overrides = _may_override(candidate, overrides)
         if is_injectable(candidate) or externally_provided(candidate):
-            return candidate, new_under_override
-    return None, under_override
+            return candidate, new_overrides
+    return None, overrides
 
 
-def _may_override(class_or_func, overrides, under_override) -> Tuple[Callable, bool]:
-    """If under_override: it may override class_or_func and update under_override"""
-    if not under_override:
-        override = overrides(class_or_func)
-        under_override = bool(override and override != class_or_func)
-        class_or_func = override or class_or_func
-    return class_or_func, under_override
+def _empty_overrides(class_or_func: Callable[[Type], Optional[Type]]
+                     ) -> Optional[Callable]:
+    return None
+
+
+def _may_override(class_or_func, overrides
+                  ) -> Tuple[Callable, Callable[[Type], Optional[Type]]]:
+    """
+    May override ``class_or_func`` if ``overrides`` function suggest it.
+    In such a case, ``overrides`` function is replaced with ``_empty_overrides``
+    to stop overriding in children.
+    """
+    override = overrides(class_or_func)
+    under_override = bool(override and override != class_or_func)
+    class_or_func = override or class_or_func
+    overrides_for_children = _empty_overrides if under_override else overrides
+    return class_or_func, overrides_for_children
 
 
 def _ensure_can_provide_func(cont_or_call: Optional[ContainerOrCallableType]
