@@ -129,11 +129,15 @@ class Plan(List[Step]):
         return self[-1][1].kwargs(instances)
 
 
+OverrideFn = Callable[[Callable], Optional[Callable]]
+
+
 def plan(class_or_func: Callable, *,
          is_injectable: ContainerOrCallableType,
          externally_provided: Optional[ContainerOrCallableType] = None,
          full_final_kwargs=False,
-         overrides: Optional[Callable[[Type], Optional[Type]]] = None) -> Plan:
+         overrides: Optional[OverrideFn] = None,
+         recursive_overrides: bool = False) -> Plan:
     """ Plan the sequence of instantiation steps required to fulfill the
     the arguments of the given function or the arguments of its
     constructor if a class is given instead. In other words, this function
@@ -266,19 +270,43 @@ def plan(class_or_func: Callable, *,
         In other words, the kwargs dict returned by the method
         ``Plan.final_kwargs`` could not contain all required
         arguments to build/invoke the input class/function.
+    :param overrides: A funtion that maps a class/function to a different
+        class/function. The function must return None if no special mapping should
+        be applied for a particular class/function. The suggested remapping serves
+        to override a particular dependency in the dependency tree, and
+        update the plan acordingly. For example, you might want to replace class
+        ``PenneWithTomate`` by ``SpaghettiBolognese`` whenever it is find in the
+        dependendy tree, but updating the plan so that ``SpaghettiBolognese``
+        gets its dependencies ``Meat`` and ``Spaghetti`` resolved properly.
+    :param recursive_overrides: If True, ``overrides`` are applied recursively
+        to the children dependencies of an overriden class/function.
+        If False, overrides are not applied to the children of an
+        overriden node in the dependency tree. Consider the following example.
+        The class ``PriceInEur`` is wanted to be overriden by the class
+        ``PriceInDollar``, but the later requires using ``PriceInEur`` and then
+        apply an
+        exchange rate over the price. That is, ``PriceInDollar`` depends on the
+        class we want to override. If ``recursive_overrides`` is True, then
+        an error is raised because a cyclid dependency would have been found:
+        the dependency of ``PriceInDollar``, which is ``PriceInEur``, will
+        be also overriden by ``PriceInDollar`` override, leading to a cyclic dependency.
+        That had't be the case if ``recursive_overrides`` would have been False.
+        In such a case, the override won't have been applied to the dependency of
+        ``PriceInDollar``, so the plan would have succeed.
     :return: A plan
     """
     is_injectable = _ensure_can_provide_func(is_injectable)
     externally_provided = _ensure_can_provide_func(externally_provided)
     overrides = overrides or _empty_overrides
-    class_or_func, overrides = _may_override(class_or_func, overrides)
+    class_or_func, overrides = _may_override(class_or_func, overrides, recursive_overrides)
 
     plan, _ = _plan(class_or_func,
                     is_injectable=is_injectable,
                     externally_provided=externally_provided,
                     full_final_kwargs=full_final_kwargs,
                     dependency_stack=None,
-                    overrides=overrides)
+                    overrides=overrides,
+                    recursive_overrides=recursive_overrides)
     return plan
 
 
@@ -287,7 +315,8 @@ def _plan(class_or_func: Callable, *,
           externally_provided: Callable[[Callable], bool],
           full_final_kwargs,
           dependency_stack=None,
-          overrides: Callable[[Type], Optional[Type]]
+          overrides: Callable[[Callable], Optional[Callable]],
+          recursive_overrides: bool = False
           ) -> Tuple[Plan, List[Tuple]]:
     dependency_stack = dependency_stack or []
     is_root_call = not dependency_stack  # For better code reading
@@ -309,7 +338,8 @@ def _plan(class_or_func: Callable, *,
     args_errs = defaultdict(list)  # type: Dict[str, List[Tuple]]
     non_injectable_errs = defaultdict(list)  # type: Dict[str, List[Tuple]]
     for argname, types in arguments.items():
-        sel_cls, arg_overrides = _select_type(types, is_injectable, externally_provided, overrides)
+        sel_cls, arg_overrides = _select_type(
+            types, is_injectable, externally_provided, overrides, recursive_overrides)
         if sel_cls is not None:
             errors = []  # type: List[Tuple]
             if sel_cls not in plan_od:
@@ -318,7 +348,8 @@ def _plan(class_or_func: Callable, *,
                                      externally_provided=externally_provided,
                                      full_final_kwargs=True,
                                      dependency_stack=dependency_stack,
-                                     overrides=arg_overrides)
+                                     overrides=arg_overrides,
+                                     recursive_overrides=recursive_overrides)
                 plan_od.update(plan)
             if errors:
                 args_errs[argname].extend(errors)
@@ -351,26 +382,27 @@ def _plan(class_or_func: Callable, *,
 def _select_type(types,
                  is_injectable,
                  externally_provided,
-                 overrides: Callable
+                 overrides: Callable,
+                 recursive_overrides: bool
                  ) -> Tuple[Optional[Callable], Callable]:
     """
     Choose the first type that can be provided. None otherwise. Also return
     a boolean to keep track of overriding status.
     """
     for candidate in types:
-        candidate, new_overrides = _may_override(candidate, overrides)
+        candidate, new_overrides = _may_override(
+            candidate, overrides, recursive_overrides)
         if is_injectable(candidate) or externally_provided(candidate):
             return candidate, new_overrides
     return None, overrides
 
 
-def _empty_overrides(class_or_func: Callable[[Type], Optional[Type]]
-                     ) -> Optional[Callable]:
+def _empty_overrides(class_or_func: Callable) -> Optional[Callable]:
     return None
 
 
-def _may_override(class_or_func, overrides
-                  ) -> Tuple[Callable, Callable[[Type], Optional[Type]]]:
+def _may_override(class_or_func, overrides: OverrideFn, recursive_overrides: bool
+                  ) -> Tuple[Callable, OverrideFn]:
     """
     May override ``class_or_func`` if ``overrides`` function suggest it.
     In such a case, ``overrides`` function is replaced with ``_empty_overrides``
@@ -379,7 +411,8 @@ def _may_override(class_or_func, overrides
     override = overrides(class_or_func)
     under_override = bool(override and override != class_or_func)
     class_or_func = override or class_or_func
-    overrides_for_children = _empty_overrides if under_override else overrides
+    stop_overriding = not recursive_overrides and under_override
+    overrides_for_children = _empty_overrides if stop_overriding else overrides
     return class_or_func, overrides_for_children
 
 
