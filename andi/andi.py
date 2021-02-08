@@ -406,7 +406,7 @@ def _may_override(class_or_func, overrides: OverrideFn, recursive_overrides: boo
     """
     May override ``class_or_func`` if ``overrides`` function suggest it.
     In such a case, ``overrides`` function is replaced with ``_empty_overrides``
-    to stop overriding in children.
+    to stop overriding in children if recursive_overrides is disabled.
     """
     override = overrides(class_or_func)
     under_override = bool(override and override != class_or_func)
