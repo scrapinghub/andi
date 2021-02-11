@@ -384,10 +384,10 @@ def _select_type(types,
                  externally_provided,
                  overrides: Callable,
                  recursive_overrides: bool
-                 ) -> Tuple[Optional[Callable], Callable]:
+                 ) -> Tuple[Optional[Callable], OverrideFn]:
     """
     Choose the first type that can be provided. None otherwise. Also return
-    a boolean to keep track of overriding status.
+    the overrides function to be used from now on.
     """
     for candidate in types:
         candidate, new_overrides = _may_override(
