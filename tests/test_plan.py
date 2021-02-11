@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Union, Optional
 
 import pytest
@@ -410,3 +411,49 @@ def test_plan_callable_object():
     func = MyFunc()
     plan = andi.plan(func, is_injectable={B})
     assert plan == [(B, {}), (func, {'b': B})]
+
+
+@pytest.mark.parametrize("recursive_overrides", [False, True])
+def test_plan_overrides(recursive_overrides):
+    plan_fn = partial(andi.plan, recursive_overrides=recursive_overrides)
+    plan = plan_fn(A, is_injectable=ALL, overrides={A: B}.get)
+    assert plan == [(B, {})]
+    plan = plan_fn(C, is_injectable=ALL, overrides={A: B}.get)
+    assert plan == [(B, {}), (C, {'a': B, 'b': B})]
+    plan = plan_fn(C, is_injectable=ALL, externally_provided=[A],
+                   overrides={A: B, B: A}.get)
+    assert plan == [(B, {}), (A, {}), (C, {'a': B, 'b': A})]
+
+    # Check cycle detection
+    with pytest.raises(NonProvidableError) as exec_info:
+        plan_fn(C, is_injectable=ALL, overrides={A: C}.get)
+    expected_errors = [
+        ('a', [(CyclicDependencyErrCase(C, [C]))])
+    ]
+    assert error_causes(exec_info) == expected_errors
+
+    # Check non injectable override
+    with pytest.raises(NonProvidableError):
+        plan_fn(C, is_injectable=ALL, overrides={A: str}.get, full_final_kwargs=True)
+
+    if recursive_overrides:
+        # Check overriding dont stops in the children of the overridden node
+        with pytest.raises(NonProvidableError) as exec_info:
+            plan = plan_fn(C, is_injectable=ALL, externally_provided=[A],
+                           overrides={C: D}.get)
+        expected_errors = [
+            ('c', [(CyclicDependencyErrCase(D, [D]))])
+        ]
+        assert error_causes(exec_info) == expected_errors
+        plan = plan_fn(E, is_injectable=ALL, externally_provided=[A],
+                       overrides={D: C, A: B}.get)
+        assert plan == [(B, {}), (C, {'a': B, 'b': B}),
+                        (E, {'d': C, 'c': C, 'b': B})]
+    else:
+        # Check overriding stops in the children of the overridden node
+        plan = plan_fn(C, is_injectable=ALL, externally_provided=[A],
+                                   overrides={C: D}.get)
+        plan2 = plan_fn(C, is_injectable=ALL, externally_provided=[A],
+                                   overrides={C: D, A: B}.get)
+        assert plan2 == plan
+        assert plan == [(A, {}), (B, {}), (C, {'a': A, 'b': B}), (D, {'a': A, 'c': C})]
