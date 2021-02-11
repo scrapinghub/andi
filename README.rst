@@ -18,9 +18,6 @@ andi
    :target: https://codecov.io/gh/scrapinghub/andi
    :alt: Coverage report
 
-.. warning::
-    Current status is "experimental".
-
 ``andi`` makes easy implementing custom dependency injection mechanisms
 where dependencies are expressed using type annotations.
 
