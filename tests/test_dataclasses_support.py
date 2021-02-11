@@ -31,7 +31,9 @@ def test_dataclasses_py37_forward_refs():
     assert andi.inspect(ADCnp.__init__) == {'b': [BDCnp]}
 
 
-@pytest.mark.skipif(sys.version_info < (3, 7, 6) or sys.version_info[:3] == (3, 8, 0),
+@pytest.mark.skipif((sys.version_info < (3, 7, 6) or
+                     sys.version_info[:3] == (3, 8, 0) or
+                     sys.version_info >= (3, 9, 0)),
                     reason="Dataclasses with forward references require "
                            "Python 3.7.6 or higher or Python 3.8.1 or higher")
 def test_dataclasses_py37_str_ref():
@@ -40,3 +42,11 @@ def test_dataclasses_py37_str_ref():
     from typing import ForwardRef
     from tests.py37_pep_563 import ADCStrRef
     assert type(andi.inspect(ADCStrRef.__init__)['b'][0]) == ForwardRef
+
+
+@pytest.mark.skipif(sys.version_info < (3, 9, 0),
+                    reason="Dataclasses with string forward references in "
+                           "Python >= 3.9 are resolved as types :-)")
+def test_dataclasses_py39_str_ref():
+    from tests.py37_pep_563 import ADCStrRef, BDC
+    assert andi.inspect(ADCStrRef.__init__) == {'b': [BDC]}
