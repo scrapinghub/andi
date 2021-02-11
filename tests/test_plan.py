@@ -422,7 +422,8 @@ def test_plan_overrides(recursive_overrides):
     assert plan == [(B, {}), (C, {'a': B, 'b': B})]
     plan = plan_fn(C, is_injectable=ALL, externally_provided=[A],
                    overrides={A: B, B: A}.get)
-    assert plan == [(B, {}), (A, {}), (C, {'a': B, 'b': A})]
+    assert (plan == [(B, {}), (A, {}), (C, {'a': B, 'b': A})] or
+            plan == [(A, {}), (B, {}), (C, {'a': B, 'b': A})])
 
     # Check cycle detection
     with pytest.raises(NonProvidableError) as exec_info:
@@ -456,4 +457,5 @@ def test_plan_overrides(recursive_overrides):
         plan2 = plan_fn(C, is_injectable=ALL, externally_provided=[A],
                                    overrides={C: D, A: B}.get)
         assert plan2 == plan
-        assert plan == [(A, {}), (B, {}), (C, {'a': A, 'b': B}), (D, {'a': A, 'c': C})]
+        assert (plan == [(A, {}), (B, {}), (C, {'a': A, 'b': B}), (D, {'a': A, 'c': C})] or
+                plan == [(B, {}), (A, {}), (C, {'a': A, 'b': B}), (D, {'a': A, 'c': C})])
