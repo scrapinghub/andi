@@ -416,6 +416,48 @@ are fulfilled and otherwise fail. Such is the case for classes.
 So it is recommended to set ``full_final_kwargs=True`` when invoking
 ``andi.plan`` for classes.
 
+Overrides
+---------
+
+Let's go back to the ``Car`` example. Imagine you want to build a car again.
+But this time you want to replace the ``Engine`` because this is
+going to be an electric car!. And of course, an electric engine contains a battery
+and have no valves at all. This could be the new ``Engine``:
+
+.. code-block:: python
+
+    class Battery:
+        pass
+
+    class ElectricEngine(Engine):
+
+        def __init__(self, battery: Battery):
+            self.battery = valves
+
+Andi offers the possibility to replace dependencies when planning,
+and this is what is required to build the electric car: we need
+to replace any dependency on ``Engine`` by a dependency on ``ElectricEngine``.
+This is exactly what overrides offers. Let's see how ``plan`` should
+be invoked in this case:
+
+.. code-block:: python
+
+    plan = andi.plan(Car, is_injectable=is_injectable,
+                     overrides={Engine: ElectricEngine}.get)
+
+Note that Andi will unroll the new dependencies properly. That is,
+``Valves`` and ``Engine`` won't be in the resultant plan but
+``ElectricEngine`` and ``Battery`` will.
+
+In summary, overrides offers a way to override the default
+dependencies anywhere in the tree, changing them with an
+alternative one.
+
+By default overrides are not recursive: overrides aren't applied
+over the children of an already overridden dependency. There
+is flag to turn recursion on if this is what is desired.
+Check ``andi.plan`` documentation for more information.
+
 Why type annotations?
 ---------------------
 
