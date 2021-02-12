@@ -10,8 +10,8 @@ andi
    :target: https://pypi.python.org/pypi/andi
    :alt: Supported Python Versions
 
-.. image:: https://travis-ci.com/scrapinghub/andi.svg?branch=master
-   :target: https://travis-ci.com/scrapinghub/andi
+.. image:: https://github.com/scrapinghub/andi/workflows/tox/badge.svg
+   :target: https://github.com/scrapinghub/andi/actions
    :alt: Build Status
 
 .. image:: https://codecov.io/github/scrapinghub/andi/coverage.svg?branch=master
