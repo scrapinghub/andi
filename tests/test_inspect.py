@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from functools import wraps, partial
 from typing import Union, Optional, TypeVar, Type
 
