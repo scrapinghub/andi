@@ -2,7 +2,7 @@ import sys
 import inspect
 import types
 import functools
-from typing import Union, List, Callable, Dict, Container, cast, Type
+from typing import Union, List, Callable, Dict, Container, cast, Type, get_type_hints
 
 
 def is_union(tp) -> bool:
@@ -18,6 +18,16 @@ def is_union(tp) -> bool:
     False
     """
     return hasattr(tp, "__origin__") and tp.__origin__ is Union
+
+
+def get_type_hints_with_extras(obj, *args, **kwargs):
+    """
+    Like get_type_hints, but sets include_extras=True
+    for Python versions which support Annotated
+    """
+    if sys.version_info >= (3, 9):
+        kwargs["include_extras"] = True
+    return get_type_hints(obj, *args, **kwargs)
 
 
 def get_union_args(tp) -> List:

@@ -1,7 +1,7 @@
 from collections import OrderedDict, defaultdict
 from typing import (
     Dict, List, Optional, Type, Callable, Union, Container,
-    get_type_hints, Tuple, MutableMapping, Any, Mapping)
+    Tuple, MutableMapping, Any, Mapping)
 
 from andi.typeutils import (
     get_union_args,
@@ -9,6 +9,7 @@ from andi.typeutils import (
     get_globalns,
     get_unannotated_params,
     get_callable_func_obj,
+    get_type_hints_with_extras,
 )
 from andi.errors import (
     NonProvidableError,
@@ -33,7 +34,7 @@ def inspect(class_or_func: Callable) -> Dict[str, List[Optional[Type]]]:
     """
     func = get_callable_func_obj(class_or_func)
     globalns = get_globalns(func)
-    annotations = get_type_hints(func, globalns)
+    annotations = get_type_hints_with_extras(func, globalns)
     for name in get_unannotated_params(func, annotations):
         annotations[name] = None
     annotations.pop('return', None)
