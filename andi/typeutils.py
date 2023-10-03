@@ -2,7 +2,7 @@ import sys
 import inspect
 import types
 import functools
-from typing import Union, List, Callable, Dict, Container, cast, Type, get_type_hints
+from typing import Union, List, Callable, Dict, Container, cast, Type, get_type_hints, get_origin, get_args
 
 
 def is_union(tp) -> bool:
@@ -161,3 +161,16 @@ def get_callable_func_obj(class_or_func: Callable) -> Callable:
         else:
             # not sure how to trigger it
             raise TypeError("Unexpected callable object %r" % (class_or_func,))
+
+
+def is_typing_annotated(o: Callable) -> bool:
+    """Returns True if the input is typing.Annotated and Python is 3.9+"""
+    if sys.version_info < (3, 9):
+        return False
+    from typing import Annotated
+    return get_origin(o) == Annotated
+
+
+def strip_annotated(o: Callable) -> Callable:
+    """Return the underlying type for Annotated, the input itself otherwise."""
+    return get_args(o)[0] if is_typing_annotated(o) else o

@@ -1,15 +1,17 @@
 from collections import OrderedDict, defaultdict
 from typing import (
     Dict, List, Optional, Type, Callable, Union, Container,
-    Tuple, MutableMapping, Any, Mapping)
+    Tuple, MutableMapping, Any, Mapping, Set)
 
 from andi.typeutils import (
     get_union_args,
+    is_typing_annotated,
     is_union,
     get_globalns,
     get_unannotated_params,
     get_callable_func_obj,
     get_type_hints_with_extras,
+    strip_annotated,
 )
 from andi.errors import (
     NonProvidableError,
@@ -321,13 +323,14 @@ def _plan(class_or_func: Callable, *,
     dependency_stack = dependency_stack or []
     is_root_call = not dependency_stack  # For better code reading
     plan_od = OrderedDict()  # type: MutableMapping[Callable, KwargsSpec]
+    seen_annotated: Set[Callable] = set()
     type_for_arg = KwargsSpec()
 
-    if externally_provided(class_or_func):
+    if externally_provided(strip_annotated(class_or_func)):
         return Plan([(class_or_func, KwargsSpec())], full_final_kwargs=True), []
 
     # At this point the class/function must be injectable for non root cases
-    assert is_root_call or is_injectable(class_or_func)
+    assert is_root_call or is_injectable(strip_annotated(class_or_func))
 
     if class_or_func in dependency_stack:
         return Plan(), [CyclicDependencyErrCase(class_or_func, dependency_stack)]
@@ -343,14 +346,23 @@ def _plan(class_or_func: Callable, *,
         if sel_cls is not None:
             errors = []  # type: List[Tuple]
             if sel_cls not in plan_od:
-                plan, errors = _plan(sel_cls,
-                                     is_injectable=is_injectable,
-                                     externally_provided=externally_provided,
-                                     full_final_kwargs=True,
-                                     dependency_stack=dependency_stack,
-                                     overrides=arg_overrides,
-                                     recursive_overrides=recursive_overrides)
-                plan_od.update(plan)
+                skip = False
+                if is_typing_annotated(sel_cls):
+                    sel_cls_stripped = strip_annotated(sel_cls)
+                    if sel_cls_stripped in seen_annotated:
+                        # warning/error/skip/not skip?
+                        skip = True
+                    else:
+                        seen_annotated.add(sel_cls_stripped)
+                if not skip:
+                    plan, errors = _plan(sel_cls,
+                                         is_injectable=is_injectable,
+                                         externally_provided=externally_provided,
+                                         full_final_kwargs=True,
+                                         dependency_stack=dependency_stack,
+                                         overrides=arg_overrides,
+                                         recursive_overrides=recursive_overrides)
+                    plan_od.update(plan)
             if errors:
                 args_errs[argname].extend(errors)
             else:
@@ -392,7 +404,7 @@ def _select_type(types,
     for candidate in types:
         candidate, new_overrides = _may_override(
             candidate, overrides, recursive_overrides)
-        if is_injectable(candidate) or externally_provided(candidate):
+        if is_injectable(strip_annotated(candidate)) or externally_provided(strip_annotated(candidate)):
             return candidate, new_overrides
     return None, overrides
 

@@ -1,8 +1,9 @@
-from typing import Union, Optional
+import sys
+from typing import Union, Optional, Annotated, get_type_hints
 
 import pytest
 
-from andi.typeutils import get_union_args, get_callable_func_obj
+from andi.typeutils import get_union_args, get_callable_func_obj, get_type_hints_with_extras
 
 
 def test_get_union_args():
@@ -79,3 +80,15 @@ def test_get_callable_func_obj_call():
     assert get_callable_func_obj(Foo) is Foo.__init__
     assert get_callable_func_obj(foo.meth) == foo.meth
     assert get_callable_func_obj(foo) == foo.__call__
+
+
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="No Annotated support in Python < 3.9")
+def test_get_hint_extras():
+    def f(x: Annotated[int, 42]) -> None:
+        pass
+
+    hints = get_type_hints(f)
+    assert hints["x"] == int
+
+    hints_annotated = get_type_hints_with_extras(f)
+    assert hints_annotated["x"] == Annotated[int, 42]
