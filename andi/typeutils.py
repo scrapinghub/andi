@@ -2,7 +2,7 @@ import sys
 import inspect
 import types
 import functools
-from typing import Union, List, Callable, Dict, Container, cast, Type, get_type_hints, get_args
+from typing import Union, List, Callable, Dict, Container, cast, Type, get_type_hints
 
 
 def is_union(tp) -> bool:
@@ -173,4 +173,8 @@ def is_typing_annotated(o: Callable) -> bool:
 
 def strip_annotated(o: Callable) -> Callable:
     """Return the underlying type for Annotated, the input itself otherwise."""
-    return get_args(o)[0] if is_typing_annotated(o) else o
+    if is_typing_annotated(o):
+        from typing import get_args
+        return get_args(o)[0]
+    else:
+        return o
