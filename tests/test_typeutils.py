@@ -1,5 +1,5 @@
 import sys
-from typing import Union, Optional, Annotated, get_type_hints
+from typing import Union, Optional, get_type_hints
 
 import pytest
 
@@ -84,6 +84,8 @@ def test_get_callable_func_obj_call():
 
 @pytest.mark.skipif(sys.version_info < (3, 9), reason="No Annotated support in Python < 3.9")
 def test_get_hint_extras():
+    from typing import Annotated
+
     def f(x: Annotated[int, 42]) -> None:
         pass
 

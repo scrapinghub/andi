@@ -2,7 +2,7 @@ import sys
 import inspect
 import types
 import functools
-from typing import Union, List, Callable, Dict, Container, cast, Type, get_type_hints, get_origin, get_args
+from typing import Union, List, Callable, Dict, Container, cast, Type, get_type_hints, get_args
 
 
 def is_union(tp) -> bool:
@@ -167,7 +167,7 @@ def is_typing_annotated(o: Callable) -> bool:
     """Returns True if the input is typing.Annotated and Python is 3.9+"""
     if sys.version_info < (3, 9):
         return False
-    from typing import Annotated
+    from typing import Annotated, get_origin
     return get_origin(o) == Annotated
 
 

@@ -1,6 +1,6 @@
 import sys
 from functools import partial
-from typing import Union, Optional, Annotated
+from typing import Union, Optional
 
 import pytest
 
@@ -464,6 +464,8 @@ def test_plan_overrides(recursive_overrides):
 
 @pytest.mark.skipif(sys.version_info < (3, 9), reason="No Annotated support in Python < 3.9")
 def test_plan_annotations():
+    from typing import Annotated
+
     class MyFunc:
         def __call__(self, b: Annotated[B, 42]):
             pass
@@ -475,6 +477,8 @@ def test_plan_annotations():
 
 @pytest.mark.skipif(sys.version_info < (3, 9), reason="No Annotated support in Python < 3.9")
 def test_plan_annotations_duplicate():
+    from typing import Annotated
+
     class MyFunc:
         def __call__(self, b: Annotated[B, 42], b2: Annotated[B, 43]):
         # def __call__(self, b: B, b2: B):

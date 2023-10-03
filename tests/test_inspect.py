@@ -1,6 +1,6 @@
 import sys
 from functools import wraps, partial
-from typing import Union, Optional, TypeVar, Type, Annotated
+from typing import Union, Optional, TypeVar, Type
 
 import pytest
 
@@ -138,6 +138,8 @@ def test_callable_object():
 
 @pytest.mark.skipif(sys.version_info < (3, 9), reason="No Annotated support in Python < 3.9")
 def test_annotations():
+    from typing import Annotated
+
     def f(x: Annotated[int, 42]) -> None:
         pass
 
