@@ -1,11 +1,10 @@
 from collections import OrderedDict, defaultdict
 from typing import (
     Dict, List, Optional, Type, Callable, Union, Container,
-    Tuple, MutableMapping, Any, Mapping, Set)
+    Tuple, MutableMapping, Any, Mapping)
 
 from andi.typeutils import (
     get_union_args,
-    is_typing_annotated,
     is_union,
     get_globalns,
     get_unannotated_params,
@@ -323,7 +322,6 @@ def _plan(class_or_func: Callable, *,
     dependency_stack = dependency_stack or []
     is_root_call = not dependency_stack  # For better code reading
     plan_od = OrderedDict()  # type: MutableMapping[Callable, KwargsSpec]
-    seen_annotated: Set[Callable] = set()
     type_for_arg = KwargsSpec()
 
     if externally_provided(strip_annotated(class_or_func)):
@@ -346,23 +344,14 @@ def _plan(class_or_func: Callable, *,
         if sel_cls is not None:
             errors = []  # type: List[Tuple]
             if sel_cls not in plan_od:
-                skip = False
-                if is_typing_annotated(sel_cls):
-                    sel_cls_stripped = strip_annotated(sel_cls)
-                    if sel_cls_stripped in seen_annotated:
-                        # warning/error/skip/not skip?
-                        skip = True
-                    else:
-                        seen_annotated.add(sel_cls_stripped)
-                if not skip:
-                    plan, errors = _plan(sel_cls,
-                                         is_injectable=is_injectable,
-                                         externally_provided=externally_provided,
-                                         full_final_kwargs=True,
-                                         dependency_stack=dependency_stack,
-                                         overrides=arg_overrides,
-                                         recursive_overrides=recursive_overrides)
-                    plan_od.update(plan)
+                plan, errors = _plan(sel_cls,
+                                     is_injectable=is_injectable,
+                                     externally_provided=externally_provided,
+                                     full_final_kwargs=True,
+                                     dependency_stack=dependency_stack,
+                                     overrides=arg_overrides,
+                                     recursive_overrides=recursive_overrides)
+                plan_od.update(plan)
             if errors:
                 args_errs[argname].extend(errors)
             else:

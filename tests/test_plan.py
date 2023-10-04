@@ -480,13 +480,21 @@ def test_plan_annotations_duplicate():
     from typing import Annotated
 
     class MyFunc:
-        def __call__(self, b: Annotated[B, 42], b2: Annotated[B, 43]):
-        # def __call__(self, b: B, b2: B):
+        def __call__(self,
+                     b: Annotated[B, 42],
+                     b2: Annotated[B, 43],
+                     b3: Annotated[B, 43],
+                     ):
             pass
 
     func = MyFunc()
     plan = andi.plan(func, is_injectable={B})
     assert plan == [
         (Annotated[B, 42], {}),
-        (func, {'b': Annotated[B, 42], 'b2': Annotated[B, 42]}),
+        (Annotated[B, 43], {}),
+        (func, {
+            'b': Annotated[B, 42],
+            'b2': Annotated[B, 43],
+            'b3': Annotated[B, 43],
+        }),
     ]
