@@ -164,7 +164,7 @@ def get_callable_func_obj(class_or_func: Callable) -> Callable:
 
 
 def is_typing_annotated(o: Callable) -> bool:
-    """Returns True if the input is typing.Annotated and Python is 3.9+"""
+    """Return True if the input is typing.Annotated and Python is 3.9+"""
     if sys.version_info < (3, 9):
         return False
     from typing import Annotated, get_origin
