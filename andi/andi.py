@@ -1,7 +1,7 @@
 from collections import OrderedDict, defaultdict
 from typing import (
     Dict, List, Optional, Type, Callable, Union, Container,
-    get_type_hints, Tuple, MutableMapping, Any, Mapping)
+    Tuple, MutableMapping, Any, Mapping)
 
 from andi.typeutils import (
     get_union_args,
@@ -9,6 +9,8 @@ from andi.typeutils import (
     get_globalns,
     get_unannotated_params,
     get_callable_func_obj,
+    get_type_hints_with_extras,
+    strip_annotated,
 )
 from andi.errors import (
     NonProvidableError,
@@ -33,7 +35,7 @@ def inspect(class_or_func: Callable) -> Dict[str, List[Optional[Type]]]:
     """
     func = get_callable_func_obj(class_or_func)
     globalns = get_globalns(func)
-    annotations = get_type_hints(func, globalns)
+    annotations = get_type_hints_with_extras(func, globalns)
     for name in get_unannotated_params(func, annotations):
         annotations[name] = None
     annotations.pop('return', None)
@@ -322,11 +324,11 @@ def _plan(class_or_func: Callable, *,
     plan_od = OrderedDict()  # type: MutableMapping[Callable, KwargsSpec]
     type_for_arg = KwargsSpec()
 
-    if externally_provided(class_or_func):
+    if externally_provided(strip_annotated(class_or_func)):
         return Plan([(class_or_func, KwargsSpec())], full_final_kwargs=True), []
 
     # At this point the class/function must be injectable for non root cases
-    assert is_root_call or is_injectable(class_or_func)
+    assert is_root_call or is_injectable(strip_annotated(class_or_func))
 
     if class_or_func in dependency_stack:
         return Plan(), [CyclicDependencyErrCase(class_or_func, dependency_stack)]
@@ -391,7 +393,7 @@ def _select_type(types,
     for candidate in types:
         candidate, new_overrides = _may_override(
             candidate, overrides, recursive_overrides)
-        if is_injectable(candidate) or externally_provided(candidate):
+        if is_injectable(strip_annotated(candidate)) or externally_provided(strip_annotated(candidate)):
             return candidate, new_overrides
     return None, overrides
 

@@ -399,6 +399,23 @@ Union
 ``DevelopmentDBConnection`` will be injected in the absence of
 ``ProductionDBConnection``.
 
+Annotated
+---------
+
+On Python 3.9+ ``Annotated`` type annotations can be used to attach arbitrary
+metadata that will be preserved in the plan. Occurrences of the same type
+annotated with different metadata will not be considered duplicates. For
+example:
+
+.. code-block:: python
+
+    @dataclass
+    class Dashboard:
+        conn_main: Annotated[DBConnection, "main DB"]
+        conn_stats: Annotated[DBConnection, "stats DB"]
+
+The plan will contain both dependencies.
+
 Full final kwargs mode
 -------------------------
 

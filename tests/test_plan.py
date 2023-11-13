@@ -1,3 +1,4 @@
+import sys
 from functools import partial
 from typing import Union, Optional
 
@@ -459,3 +460,41 @@ def test_plan_overrides(recursive_overrides):
         assert plan2 == plan
         assert (plan == [(A, {}), (B, {}), (C, {'a': A, 'b': B}), (D, {'a': A, 'c': C})] or
                 plan == [(B, {}), (A, {}), (C, {'a': A, 'b': B}), (D, {'a': A, 'c': C})])
+
+
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="No Annotated support in Python < 3.9")
+def test_plan_annotations():
+    from typing import Annotated
+
+    class MyFunc:
+        def __call__(self, b: Annotated[B, 42]):
+            pass
+
+    func = MyFunc()
+    plan = andi.plan(func, is_injectable={B})
+    assert plan == [(Annotated[B, 42], {}), (func, {'b': Annotated[B, 42]})]
+
+
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="No Annotated support in Python < 3.9")
+def test_plan_annotations_duplicate():
+    from typing import Annotated
+
+    class MyFunc:
+        def __call__(self,
+                     b: Annotated[B, 42],
+                     b2: Annotated[B, 43],
+                     b3: Annotated[B, 43],
+                     ):
+            pass
+
+    func = MyFunc()
+    plan = andi.plan(func, is_injectable={B})
+    assert plan == [
+        (Annotated[B, 42], {}),
+        (Annotated[B, 43], {}),
+        (func, {
+            'b': Annotated[B, 42],
+            'b2': Annotated[B, 43],
+            'b3': Annotated[B, 43],
+        }),
+    ]
