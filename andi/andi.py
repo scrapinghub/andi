@@ -139,7 +139,7 @@ def plan(class_or_func: Callable, *,
          full_final_kwargs=False,
          overrides: Optional[OverrideFn] = None,
          recursive_overrides: bool = False,
-         custom_builders: Optional[Dict[Callable, Callable]] = None,
+         custom_builders: Optional[Dict[Callable, Callable]] = None
          ) -> Plan:
     """ Plan the sequence of instantiation steps required to fulfill the
     the arguments of the given function or the arguments of its
@@ -327,7 +327,7 @@ def _plan(class_or_func: Callable, *,
           overrides: Callable[[Callable], Optional[Callable]],
           recursive_overrides: bool = False,
           custom_builders: Optional[Dict[Callable, Callable]] = None,
-          custom_builder_result: Optional[Callable] = None,
+          custom_builder_result: Optional[Callable] = None
           ) -> Tuple[Plan, List[Tuple]]:
     dependency_stack = dependency_stack or []
     is_root_call = not dependency_stack  # For better code reading

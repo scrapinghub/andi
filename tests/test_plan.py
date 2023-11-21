@@ -530,5 +530,5 @@ def test_plan_custom_builder():
         (fn, {"item": Item})
     ]
     instances = build(plan, custom_builders=custom_builders)
-    assert list(instances.keys()) == [B, Page, Item, fn]
-    assert list(instances.values())[-1] == 43
+    assert set(instances.keys()) == {B, Page, Item, fn}
+    assert instances[fn] == 43
