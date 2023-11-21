@@ -416,6 +416,47 @@ example:
 
 The plan will contain both dependencies.
 
+Custom builders
+---------------
+
+Sometimes a dependency can't be created directly but needs some additional code
+to be built. And that code can also have its own dependencies:
+
+.. code-block:: python
+
+    class Wheels:
+        pass
+
+    def wheel_factory(wheel_builder: WheelBuilder) -> Wheels:
+        return wheel_builder.get_wheels()
+
+As by default ``andi`` can't know how to create a ``Wheels`` instance or that
+the plan needs to create a ``WheelBuilder`` instance first, it needs to be told
+this with a ``custom_builders`` argument:
+
+.. code-block:: python
+
+    custom_builders = {
+        Wheels: wheel_factory,
+    }
+
+    plan = andi.plan(Car, is_injectable={Engine, Wheels, Valves},
+                     custom_builders=custom_builders,
+                     )
+
+The build code also needs to know how to build ``Wheels`` instances:
+
+.. code-block:: python
+
+    def build(plan):
+        instances = {}
+        for fn_or_cls, kwargs_spec in plan:
+            if fn_or_cls in custom_builders:
+                instances[fn_or_cls] = custom_builders[cls](**kwargs_spec.kwargs(instances))
+            else:
+                instances[fn_or_cls] = fn_or_cls(**kwargs_spec.kwargs(instances))
+        return instances
+
 Full final kwargs mode
 -------------------------
 

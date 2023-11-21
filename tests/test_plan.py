@@ -498,3 +498,37 @@ def test_plan_annotations_duplicate():
             'b3': Annotated[B, 43],
         }),
     ]
+
+
+def test_plan_custom_builder():
+    class Item:
+        def __init__(self, field: int):
+            self.field = field
+
+    class Page:
+        def __init__(self, b: B):
+            pass
+
+        def to_item(self):
+            return Item(42)
+
+    def fn(item: Item) -> int:
+        return item.field + 1
+
+    def item_factory(page: Page) -> Item:
+        return page.to_item()
+
+    custom_builders = {
+        Item: item_factory,
+    }
+
+    plan = andi.plan(fn, is_injectable={B, Page}, custom_builders=custom_builders)
+    assert plan == [
+        (B, {}),
+        (Page, {"b": B}),
+        (Item, {"page": Page}),
+        (fn, {"item": Item})
+    ]
+    instances = build(plan, custom_builders=custom_builders)
+    assert list(instances.keys()) == [B, Page, Item, fn]
+    assert list(instances.values())[-1] == 43
