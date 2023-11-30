@@ -1,4 +1,4 @@
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict, defaultdict, namedtuple
 from typing import (
     Dict, List, Optional, Type, Callable, Union, Container,
     Tuple, MutableMapping, Any, Mapping)
@@ -139,7 +139,7 @@ def plan(class_or_func: Callable, *,
          full_final_kwargs=False,
          overrides: Optional[OverrideFn] = None,
          recursive_overrides: bool = False,
-         custom_builders: Optional[Dict[Callable, Callable]] = None
+         custom_builder_fn: Callable[[Callable], Optional[Callable]] = lambda _: None
          ) -> Plan:
     """ Plan the sequence of instantiation steps required to fulfill the
     the arguments of the given function or the arguments of its
@@ -296,10 +296,10 @@ def plan(class_or_func: Callable, *,
         That had't be the case if ``recursive_overrides`` would have been False.
         In such a case, the override won't have been applied to the dependency of
         ``PriceInDollar``, so the plan would have succeed.
-    :param custom_builders: A mapping between callables that specifies that the
-        callable which is the value needs to be called instead of the callable
-        which is the key (e.g. when a class needs to be created using a factory
-        instead of its constructor).
+    :param custom_builder_fn: A function that takes a callable and returns a
+        different callable if that needs to be called instead of the original one
+        (e.g. when a class needs to be created using a factory instead of its
+        constructor) and None otherwise.
     :return: A plan
     """
     is_injectable = _ensure_can_provide_func(is_injectable)
@@ -314,10 +314,18 @@ def plan(class_or_func: Callable, *,
                     dependency_stack=None,
                     overrides=overrides,
                     recursive_overrides=recursive_overrides,
-                    custom_builders=custom_builders,
+                    custom_builder_fn=custom_builder_fn,
                     )
     return plan
 
+
+CustomBuilder = namedtuple("CustomBuilder", ["result_class_or_fn", "factory"])
+# class CustomBuilder(namedtuple("CustomBuilder", ["result_class_or_fn", "factory"])):
+#     """
+#     factory is a function that returns an instance of result_class_or_fn
+#     """
+#     def __call__(self, *args: Any, **kwargs: Any) -> Any:
+#         return self.factory(*args, **kwargs)
 
 def _plan(class_or_func: Callable, *,
           is_injectable: Callable[[Callable], bool],
@@ -326,19 +334,21 @@ def _plan(class_or_func: Callable, *,
           dependency_stack=None,
           overrides: Callable[[Callable], Optional[Callable]],
           recursive_overrides: bool = False,
-          custom_builders: Optional[Dict[Callable, Callable]] = None,
+          custom_builder_fn: Callable[[Callable], Optional[Callable]] = lambda _: None,
           custom_builder_result: Optional[Callable] = None
           ) -> Tuple[Plan, List[Tuple]]:
     dependency_stack = dependency_stack or []
     is_root_call = not dependency_stack  # For better code reading
-    plan_od = OrderedDict()  # type: MutableMapping[Callable, KwargsSpec]
+    plan_od = OrderedDict()  # type: MutableMapping[Union[Callable, CustomBuilder], KwargsSpec]
     type_for_arg = KwargsSpec()
 
     if externally_provided(strip_annotated(class_or_func)):
         return Plan([(class_or_func, KwargsSpec())], full_final_kwargs=True), []
 
-    if custom_builders is None:
-        custom_builders = {}
+    if not custom_builder_result:
+        plan_key = class_or_func  # type: Union[Callable, CustomBuilder]
+    else:
+        plan_key = CustomBuilder(custom_builder_result, class_or_func)
 
     # At this point the class/function must be injectable or built by a custom builder for non root cases
     assert is_root_call or is_injectable(strip_annotated(class_or_func)) or custom_builder_result
@@ -346,7 +356,7 @@ def _plan(class_or_func: Callable, *,
     if class_or_func in dependency_stack:
         return Plan(), [CyclicDependencyErrCase(class_or_func, dependency_stack)]
 
-    dependency_stack = dependency_stack + [class_or_func]
+    dependency_stack = dependency_stack + [plan_key]
     arguments = inspect(class_or_func)
 
     args_errs = defaultdict(list)  # type: Dict[str, List[Tuple]]
@@ -354,12 +364,21 @@ def _plan(class_or_func: Callable, *,
     for argname, types in arguments.items():
         sel_cls, arg_overrides = _select_type(
             types, is_injectable, externally_provided, overrides, recursive_overrides,
-            custom_builders
+            custom_builder_fn
         )
         if sel_cls is not None:
             errors = []  # type: List[Tuple]
             if sel_cls not in plan_od:
-                custom_builder = custom_builders.get(sel_cls)
+                custom_builder = custom_builder_fn(sel_cls)
+                if custom_builder:
+                    custom_builder_args = inspect(custom_builder)
+                    for arg_types in custom_builder_args.values():
+                        if class_or_func in arg_types:
+                            # Break the cycle by ignoring the custom builder.
+                            # This allows building an object externally and then using it to build
+                            # another object of the same type, via a custom builder.
+                            custom_builder = None
+                            break
                 plan, errors = _plan(custom_builder or sel_cls,
                                      is_injectable=is_injectable,
                                      externally_provided=externally_provided,
@@ -367,7 +386,7 @@ def _plan(class_or_func: Callable, *,
                                      dependency_stack=dependency_stack,
                                      overrides=arg_overrides,
                                      recursive_overrides=recursive_overrides,
-                                     custom_builders=custom_builders,
+                                     custom_builder_fn=custom_builder_fn,
                                      custom_builder_result=sel_cls if custom_builder else None,
                                      )
                 plan_od.update(plan)
@@ -391,7 +410,7 @@ def _plan(class_or_func: Callable, *,
 
     # Plan filling
     if not args_errs:
-        plan_od[custom_builder_result or class_or_func] = type_for_arg
+        plan_od[plan_key] = type_for_arg
     plan = Plan(plan_od.items(), full_final_kwargs=not non_injectable_errs)
     flatten_errors = [error
                       for errors in args_errs.values()
@@ -404,7 +423,7 @@ def _select_type(types,
                  externally_provided: Callable[[Callable], bool],
                  overrides: Callable[[Callable], Optional[Callable]],
                  recursive_overrides: bool,
-                 custom_builders: Dict[Callable, Callable],
+                 custom_builder_fn: Callable[[Callable], Optional[Callable]] = lambda _: None,
                  ) -> Tuple[Optional[Callable], OverrideFn]:
     """
     Choose the first type that can be provided. None otherwise. Also return
@@ -417,7 +436,7 @@ def _select_type(types,
         if (
                 is_injectable(candidate_stripped)
                 or externally_provided(candidate_stripped)
-                or candidate_stripped in custom_builders
+                or custom_builder_fn(candidate_stripped) is not None
         ):
             return candidate, new_overrides
     return None, overrides

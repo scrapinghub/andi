@@ -1,11 +1,12 @@
 import sys
 from functools import partial
-from typing import Union, Optional
+from typing import Union, Optional, Dict, Callable
 
 import pytest
 
 import andi
 from andi import NonProvidableError
+from andi.andi import CustomBuilder
 from andi.errors import CyclicDependencyErrCase, \
     NonInjectableOrExternalErrCase, LackingAnnotationErrCase
 from tests.utils import build
@@ -520,15 +521,60 @@ def test_plan_custom_builder():
 
     custom_builders = {
         Item: item_factory,
-    }
+    }  # type: Dict[Callable, Callable]
 
-    plan = andi.plan(fn, is_injectable={B, Page}, custom_builders=custom_builders)
+    plan = andi.plan(
+        fn,
+        is_injectable={B, Page},
+        externally_provided={Item},
+        custom_builder_fn=custom_builders.get
+    )
     assert plan == [
         (B, {}),
         (Page, {"b": B}),
-        (Item, {"page": Page}),
+        (CustomBuilder(Item, item_factory), {"page": Page}),
         (fn, {"item": Item})
     ]
-    instances = build(plan, custom_builders=custom_builders)
+    instances = build(plan)
+    assert set(instances.keys()) == {B, Page, Item, fn}
+    assert instances[fn] == 43
+
+
+def test_plan_custom_builder_modify_item():
+    class Item:
+        def __init__(self, field: int = 21):
+            self.field = field
+
+    class Page:
+        def __init__(self, b: B, item: Item):
+            self.item = item
+
+        def to_item(self):
+            return Item(self.item.field * 2)
+
+    def fn(item: Item) -> int:
+        return item.field + 1
+
+    def item_factory(page: Page) -> Item:
+        return page.to_item()
+
+    custom_builders = {
+        Item: item_factory,
+    }  # type: Dict[Callable, Callable]
+
+    plan = andi.plan(
+        fn,
+        is_injectable={B, Page},
+        externally_provided={Item},
+        custom_builder_fn=custom_builders.get
+    )
+    assert plan == [
+        (B, {}),
+        (Item, {}),
+        (Page, {"b": B, "item": Item}),
+        (CustomBuilder(Item, item_factory), {"page": Page}),
+        (fn, {"item": Item})
+    ]
+    instances = build(plan)
     assert set(instances.keys()) == {B, Page, Item, fn}
     assert instances[fn] == 43

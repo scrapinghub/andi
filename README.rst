@@ -432,7 +432,7 @@ to be built. And that code can also have its own dependencies:
 
 As by default ``andi`` can't know how to create a ``Wheels`` instance or that
 the plan needs to create a ``WheelBuilder`` instance first, it needs to be told
-this with a ``custom_builders`` argument:
+this with a ``custom_builder_fn`` argument:
 
 .. code-block:: python
 
@@ -441,18 +441,24 @@ this with a ``custom_builders`` argument:
     }
 
     plan = andi.plan(Car, is_injectable={Engine, Wheels, Valves},
-                     custom_builders=custom_builders,
+                     custom_builder_fn=custom_builders.get,
                      )
 
-The build code also needs to know how to build ``Wheels`` instances:
+``custom_builder_fn`` should be a function that takes a type and returns a factory
+for that type.
+
+The build code also needs to know how to build ``Wheels`` instances. A plan step
+for an object built with a custom builder uses an instance of the ``andi.CustomBuilder``
+wrapper that contains the type to be built in the ``result_class_or_fn`` attribute and
+the callable for building it in the ``factory`` attribute:
 
 .. code-block:: python
 
     def build(plan):
         instances = {}
         for fn_or_cls, kwargs_spec in plan:
-            if fn_or_cls in custom_builders:
-                instances[fn_or_cls] = custom_builders[cls](**kwargs_spec.kwargs(instances))
+            if isinstance(fn_or_cls, CustomBuilder):
+                instances[fn_or_cls.result_class_or_fn] = fn_or_cls.factory(**kwargs_spec.kwargs(instances))
             else:
                 instances[fn_or_cls] = fn_or_cls(**kwargs_spec.kwargs(instances))
         return instances
