@@ -1,7 +1,7 @@
 Changes
 =======
 
-0.5.0 (YYYY-MM-DD)
+0.5.0 (2023-12-12)
 ------------------
 
 * Add support for dependency metadata via ``typing.Annotated`` (requires
