@@ -1,6 +1,15 @@
 Changes
 =======
 
+0.5.0 (2023-12-12)
+------------------
+
+* Add support for dependency metadata via ``typing.Annotated`` (requires
+  Python 3.9+).
+* Add docs for overrides.
+* Add support for Python 3.10-3.12.
+* CI improvements.
+
 0.4.1 (2021-02-11)
 ------------------
 
