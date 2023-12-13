@@ -320,12 +320,6 @@ def plan(class_or_func: Callable, *,
 
 
 CustomBuilder = namedtuple("CustomBuilder", ["result_class_or_fn", "factory"])
-# class CustomBuilder(namedtuple("CustomBuilder", ["result_class_or_fn", "factory"])):
-#     """
-#     factory is a function that returns an instance of result_class_or_fn
-#     """
-#     def __call__(self, *args: Any, **kwargs: Any) -> Any:
-#         return self.factory(*args, **kwargs)
 
 def _plan(class_or_func: Callable, *,
           is_injectable: Callable[[Callable], bool],
@@ -369,6 +363,7 @@ def _plan(class_or_func: Callable, *,
         if sel_cls is not None:
             errors = []  # type: List[Tuple]
             if sel_cls not in plan_od:
+                run_plan = True
                 custom_builder = custom_builder_fn(sel_cls)
                 if custom_builder:
                     custom_builder_args = inspect(custom_builder)
@@ -377,19 +372,27 @@ def _plan(class_or_func: Callable, *,
                             # Break the cycle by ignoring the custom builder.
                             # This allows building an object externally and then using it to build
                             # another object of the same type, via a custom builder.
+                            if not externally_provided(sel_cls):
+                                non_injectable_errs[argname].append(
+                                    NonInjectableOrExternalErrCase(
+                                        argname, class_or_func, types
+                                    )
+                                )
+                                run_plan = False
                             custom_builder = None
                             break
-                plan, errors = _plan(custom_builder or sel_cls,
-                                     is_injectable=is_injectable,
-                                     externally_provided=externally_provided,
-                                     full_final_kwargs=True,
-                                     dependency_stack=dependency_stack,
-                                     overrides=arg_overrides,
-                                     recursive_overrides=recursive_overrides,
-                                     custom_builder_fn=custom_builder_fn,
-                                     custom_builder_result=sel_cls if custom_builder else None,
-                                     )
-                plan_od.update(plan)
+                if run_plan:
+                    plan, errors = _plan(custom_builder or sel_cls,
+                                         is_injectable=is_injectable,
+                                         externally_provided=externally_provided,
+                                         full_final_kwargs=True,
+                                         dependency_stack=dependency_stack,
+                                         overrides=arg_overrides,
+                                         recursive_overrides=recursive_overrides,
+                                         custom_builder_fn=custom_builder_fn,
+                                         custom_builder_result=sel_cls if custom_builder else None,
+                                         )
+                    plan_od.update(plan)
             if errors:
                 args_errs[argname].extend(errors)
             else:

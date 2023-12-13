@@ -75,7 +75,7 @@ def test_plan_and_build():
 
 def test_cyclic_dependency():
     plan = andi.plan(E, is_injectable=lambda x: True,
-              externally_provided={A})  # No error if externally provided
+                     externally_provided={A})  # No error if externally provided
     with pytest.raises(andi.NonProvidableError) as exec_info:
         andi.plan(E, is_injectable=lambda x: True, externally_provided=[])
     expected_errors = [
@@ -113,7 +113,6 @@ def test_plan_similar_for_class_or_func(cls, is_injectable, externally_provided)
     assert plan_cls == plan_func
     assert plan_cls.full_final_kwargs
     assert plan_cls.full_final_kwargs == plan_func.full_final_kwargs
-
 
     instances = build(plan_cls, external_deps)
     assert type(instances[cls]) == cls or instances[cls] == "external"
@@ -161,7 +160,7 @@ def test_plan_with_optionals():
 
     plan = andi.plan(fn, is_injectable={type(None), str},
                      externally_provided={str})
-    assert plan ==  [(str, {}), (fn, {'a': str})]
+    assert plan == [(str, {}), (fn, {'a': str})]
     assert plan.full_final_kwargs
 
     plan = andi.plan(fn, is_injectable={type(None)})
@@ -455,9 +454,9 @@ def test_plan_overrides(recursive_overrides):
     else:
         # Check overriding stops in the children of the overridden node
         plan = plan_fn(C, is_injectable=ALL, externally_provided=[A],
-                                   overrides={C: D}.get)
+                       overrides={C: D}.get)
         plan2 = plan_fn(C, is_injectable=ALL, externally_provided=[A],
-                                   overrides={C: D, A: B}.get)
+                        overrides={C: D, A: B}.get)
         assert plan2 == plan
         assert (plan == [(A, {}), (B, {}), (C, {'a': A, 'b': B}), (D, {'a': A, 'c': C})] or
                 plan == [(B, {}), (A, {}), (C, {'a': A, 'b': B}), (D, {'a': A, 'c': C})])
@@ -501,28 +500,38 @@ def test_plan_annotations_duplicate():
     ]
 
 
+class Item:
+    def __init__(self, field: int = 42):
+        self.field = field
+
+
+def get_item_factory(page_cls: Callable) -> Callable:
+    def item_factory(page: page_cls) -> Item:  # type: ignore[valid-type]
+        return page.to_item()  # type: ignore[attr-defined]
+
+    return item_factory
+
+
+def get_custom_builders(page_cls: Callable) -> Dict[Callable, Callable]:
+    return {
+        Item: get_item_factory(page_cls),
+    }
+
+
 def test_plan_custom_builder():
-    class Item:
-        def __init__(self, field: int):
-            self.field = field
+    # Item is built from Page
 
     class Page:
         def __init__(self, b: B):
             pass
 
         def to_item(self):
-            return Item(42)
+            return Item()
 
     def fn(item: Item) -> int:
         return item.field + 1
 
-    def item_factory(page: Page) -> Item:
-        return page.to_item()
-
-    custom_builders = {
-        Item: item_factory,
-    }  # type: Dict[Callable, Callable]
-
+    custom_builders = get_custom_builders(Page)
     plan = andi.plan(
         fn,
         is_injectable={B, Page},
@@ -532,7 +541,7 @@ def test_plan_custom_builder():
     assert plan == [
         (B, {}),
         (Page, {"b": B}),
-        (CustomBuilder(Item, item_factory), {"page": Page}),
+        (CustomBuilder(Item, custom_builders[Item]), {"page": Page}),
         (fn, {"item": Item})
     ]
     instances = build(plan)
@@ -541,9 +550,9 @@ def test_plan_custom_builder():
 
 
 def test_plan_custom_builder_modify_item():
-    class Item:
-        def __init__(self, field: int = 21):
-            self.field = field
+    # Item is built directly (externally provided)
+    # Page is built from that Item
+    # The final Item is built from Page
 
     class Page:
         def __init__(self, b: B, item: Item):
@@ -555,13 +564,7 @@ def test_plan_custom_builder_modify_item():
     def fn(item: Item) -> int:
         return item.field + 1
 
-    def item_factory(page: Page) -> Item:
-        return page.to_item()
-
-    custom_builders = {
-        Item: item_factory,
-    }  # type: Dict[Callable, Callable]
-
+    custom_builders = get_custom_builders(Page)
     plan = andi.plan(
         fn,
         is_injectable={B, Page},
@@ -572,9 +575,35 @@ def test_plan_custom_builder_modify_item():
         (B, {}),
         (Item, {}),
         (Page, {"b": B, "item": Item}),
-        (CustomBuilder(Item, item_factory), {"page": Page}),
+        (CustomBuilder(Item, custom_builders[Item]), {"page": Page}),
         (fn, {"item": Item})
     ]
     instances = build(plan)
     assert set(instances.keys()) == {B, Page, Item, fn}
-    assert instances[fn] == 43
+    assert instances[fn] == 85
+
+
+def test_plan_custom_builder_not_externally_provided():
+    # Item needs to be built directly but it's not externally provided
+
+    class Page:
+        def __init__(self, b: B, item: Item):
+            self.item = item
+
+        def to_item(self):
+            return Item(self.item.field)
+
+    def fn(item: Item) -> int:
+        return item.field + 1
+
+    custom_builders = get_custom_builders(Page)
+    with pytest.raises(andi.NonProvidableError) as exc_info:
+        andi.plan(
+            fn,
+            is_injectable={B, Page},
+            externally_provided=set(),
+            custom_builder_fn=custom_builders.get
+        )
+    assert error_causes(exc_info) == [
+        ("item", [NonInjectableOrExternalErrCase("item", Page, [Item])])
+    ]
