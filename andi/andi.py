@@ -321,6 +321,7 @@ def plan(class_or_func: Callable, *,
 
 CustomBuilder = namedtuple("CustomBuilder", ["result_class_or_fn", "factory"])
 
+
 def _plan(class_or_func: Callable, *,
           is_injectable: Callable[[Callable], bool],
           externally_provided: Callable[[Callable], bool],

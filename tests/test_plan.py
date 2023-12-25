@@ -571,9 +571,18 @@ def test_plan_custom_builder_modify_item():
         externally_provided={Item},
         custom_builder_fn=custom_builders.get
     )
-    assert plan == [
-        (B, {}),
-        (Item, {}),
+    # work around unordered dict iteration in Python 3.5
+    assert plan[:2] in [
+        [
+            (B, {}),
+            (Item, {})
+        ],
+        [
+            (Item, {}),
+            (B, {}),
+        ]
+    ]
+    assert plan[2:] == [
         (Page, {"b": B, "item": Item}),
         (CustomBuilder(Item, custom_builders[Item]), {"page": Page}),
         (fn, {"item": Item})
