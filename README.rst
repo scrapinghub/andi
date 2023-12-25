@@ -454,6 +454,8 @@ the callable for building it in the ``factory`` attribute:
 
 .. code-block:: python
 
+    from andi import CustomBuilder
+
     def build(plan):
         instances = {}
         for fn_or_cls, kwargs_spec in plan:
