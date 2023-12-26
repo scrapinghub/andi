@@ -346,7 +346,7 @@ def _plan(class_or_func: Callable, *,
         plan_key = CustomBuilder(custom_builder_result, class_or_func)
 
     # At this point the class/function must be injectable or built by a custom builder for non root cases
-    assert is_root_call or is_injectable(strip_annotated(class_or_func)) or custom_builder_result
+    assert is_root_call or custom_builder_result or is_injectable(strip_annotated(class_or_func))
 
     if class_or_func in dependency_stack:
         return Plan(), [CyclicDependencyErrCase(class_or_func, dependency_stack)]
