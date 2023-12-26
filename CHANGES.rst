@@ -1,7 +1,7 @@
 Changes
 =======
 
-0.6.0 (YYYY-MM-DD)
+0.6.0 (2023-12-26)
 ------------------
 
 * Drop support for Python 3.5-3.7.
