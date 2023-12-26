@@ -34,7 +34,7 @@ Installation
 
     pip install andi
 
-andi requires Python >= 3.5.3.
+andi requires Python >= 3.8.1.
 
 Goal
 ====
@@ -415,6 +415,55 @@ example:
         conn_stats: Annotated[DBConnection, "stats DB"]
 
 The plan will contain both dependencies.
+
+Custom builders
+---------------
+
+Sometimes a dependency can't be created directly but needs some additional code
+to be built. And that code can also have its own dependencies:
+
+.. code-block:: python
+
+    class Wheels:
+        pass
+
+    def wheel_factory(wheel_builder: WheelBuilder) -> Wheels:
+        return wheel_builder.get_wheels()
+
+As by default ``andi`` can't know how to create a ``Wheels`` instance or that
+the plan needs to create a ``WheelBuilder`` instance first, it needs to be told
+this with a ``custom_builder_fn`` argument:
+
+.. code-block:: python
+
+    custom_builders = {
+        Wheels: wheel_factory,
+    }
+
+    plan = andi.plan(Car, is_injectable={Engine, Wheels, Valves},
+                     custom_builder_fn=custom_builders.get,
+                     )
+
+``custom_builder_fn`` should be a function that takes a type and returns a factory
+for that type.
+
+The build code also needs to know how to build ``Wheels`` instances. A plan step
+for an object built with a custom builder uses an instance of the ``andi.CustomBuilder``
+wrapper that contains the type to be built in the ``result_class_or_fn`` attribute and
+the callable for building it in the ``factory`` attribute:
+
+.. code-block:: python
+
+    from andi import CustomBuilder
+
+    def build(plan):
+        instances = {}
+        for fn_or_cls, kwargs_spec in plan:
+            if isinstance(fn_or_cls, CustomBuilder):
+                instances[fn_or_cls.result_class_or_fn] = fn_or_cls.factory(**kwargs_spec.kwargs(instances))
+            else:
+                instances[fn_or_cls] = fn_or_cls(**kwargs_spec.kwargs(instances))
+        return instances
 
 Full final kwargs mode
 -------------------------

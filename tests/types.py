@@ -14,10 +14,10 @@ class B_36:
 
 
 @dataclass
-class ADC:
-    b: 'BDC'
+class ADCnp:
+    b: 'BDCnp'
 
 
 @dataclass
-class BDC:
-    a: ADC
+class BDCnp:
+    a: ADCnp

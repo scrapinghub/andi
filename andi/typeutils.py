@@ -114,23 +114,15 @@ def _get_globalns_for_attrs(func: Callable) -> Dict:
         return {}
 
 
-def _get_function_types():
-    # from typing module (near get_type_hints), but without ModuleType
-    _function_types = [
-        types.FunctionType,
-        types.BuiltinFunctionType,
-        types.MethodType,
-    ]
-
-    # Python < 3.7 compatibility
-    for name in ['WrapperDescriptorType', 'MethodWrapperType', 'MethodDescriptorType']:
-        if hasattr(types, name):
-            _function_types.append(getattr(types, name))
-
-    return tuple(_function_types)
-
-
-_FUNCTION_TYPES = _get_function_types()
+# from typing module (near get_type_hints), but without ModuleType
+_FUNCTION_TYPES = (
+    types.FunctionType,
+    types.BuiltinFunctionType,
+    types.MethodType,
+    types.WrapperDescriptorType,
+    types.MethodWrapperType,
+    types.MethodDescriptorType,
+)
 
 
 def get_callable_func_obj(class_or_func: Callable) -> Callable:
