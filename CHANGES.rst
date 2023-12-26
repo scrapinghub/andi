@@ -1,6 +1,12 @@
 Changes
 =======
 
+0.6.0 (YYYY-MM-DD)
+------------------
+
+* Drop support for Python 3.5-3.7.
+* Add support for dependencies that need to be built using custom callables.
+
 0.5.0 (2023-12-12)
 ------------------
 
