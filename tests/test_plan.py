@@ -61,9 +61,9 @@ def error_causes(exec_info):
 def test_plan_and_build():
     plan = andi.plan(E, is_injectable=lambda x: True,
                      externally_provided={A})
-    assert dict(plan[:2]).keys() == {A, B}
-    assert list(dict(plan[:2]).values()) == [{}, {}]
-    assert plan[2:] == [
+    assert plan == [
+        (A, {}),
+        (B, {}),
         (C, {'a': A, 'b': B}),
         (D, {'a': A, 'c': C}),
         (E, {'b': B, 'c': C, 'd': D})
@@ -571,18 +571,9 @@ def test_plan_custom_builder_modify_item():
         externally_provided={Item},
         custom_builder_fn=custom_builders.get
     )
-    # work around unordered dict iteration in Python 3.5
-    assert plan[:2] in [
-        [
-            (B, {}),
-            (Item, {})
-        ],
-        [
-            (Item, {}),
-            (B, {}),
-        ]
-    ]
-    assert plan[2:] == [
+    assert plan == [
+        (B, {}),
+        (Item, {}),
         (Page, {"b": B, "item": Item}),
         (CustomBuilder(Item, custom_builders[Item]), {"page": Page}),
         (fn, {"item": Item})

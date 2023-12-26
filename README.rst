@@ -34,7 +34,7 @@ Installation
 
     pip install andi
 
-andi requires Python >= 3.5.3.
+andi requires Python >= 3.8.1.
 
 Goal
 ====
