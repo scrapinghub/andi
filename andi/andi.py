@@ -1,4 +1,5 @@
-from collections import OrderedDict, defaultdict, namedtuple
+from collections import OrderedDict, defaultdict
+from dataclasses import dataclass
 from typing import (
     Dict, List, Optional, Type, Callable, Union, Container,
     Tuple, MutableMapping, Any, Mapping)
@@ -319,7 +320,10 @@ def plan(class_or_func: Callable, *,
     return plan
 
 
-CustomBuilder = namedtuple("CustomBuilder", ["result_class_or_fn", "factory"])
+@dataclass(frozen=True)
+class CustomBuilder:
+    result_class_or_fn: Callable
+    factory: Callable
 
 
 def _plan(class_or_func: Callable, *,
