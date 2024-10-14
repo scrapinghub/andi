@@ -34,7 +34,7 @@ Installation
 
     pip install andi
 
-andi requires Python >= 3.8.1.
+andi requires Python >= 3.9.
 
 Goal
 ====
@@ -402,10 +402,9 @@ Union
 Annotated
 ---------
 
-On Python 3.9+ ``Annotated`` type annotations can be used to attach arbitrary
-metadata that will be preserved in the plan. Occurrences of the same type
-annotated with different metadata will not be considered duplicates. For
-example:
+``Annotated`` type annotations can be used to attach arbitrary metadata that
+will be preserved in the plan. Occurrences of the same type annotated with
+different metadata will not be considered duplicates. For example:
 
 .. code-block:: python
 
