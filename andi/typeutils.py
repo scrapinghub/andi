@@ -2,7 +2,7 @@ import sys
 import inspect
 import types
 import functools
-from typing import Union, List, Callable, Dict, Container, cast, Type, get_type_hints
+from typing import Annotated, Union, List, Callable, Dict, Container, cast, Type, get_args, get_origin, get_type_hints
 
 
 def is_union(tp) -> bool:
@@ -23,10 +23,8 @@ def is_union(tp) -> bool:
 def get_type_hints_with_extras(obj, *args, **kwargs):
     """
     Like get_type_hints, but sets include_extras=True
-    for Python versions which support Annotated
     """
-    if sys.version_info >= (3, 9):
-        kwargs["include_extras"] = True
+    kwargs["include_extras"] = True
     return get_type_hints(obj, *args, **kwargs)
 
 
@@ -156,17 +154,13 @@ def get_callable_func_obj(class_or_func: Callable) -> Callable:
 
 
 def is_typing_annotated(o: Callable) -> bool:
-    """Return True if the input is typing.Annotated and Python is 3.9+"""
-    if sys.version_info < (3, 9):
-        return False
-    from typing import Annotated, get_origin
+    """Return True if the input is typing.Annotated"""
     return get_origin(o) == Annotated
 
 
 def strip_annotated(o: Callable) -> Callable:
     """Return the underlying type for Annotated, the input itself otherwise."""
     if is_typing_annotated(o):
-        from typing import get_args
         return get_args(o)[0]
     else:
         return o
