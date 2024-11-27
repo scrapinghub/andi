@@ -5,7 +5,7 @@ import pytest
 
 import andi
 from andi import NonProvidableError
-from andi.andi import CustomBuilder
+from andi.andi import CustomBuilder, Reuse
 from andi.errors import CyclicDependencyErrCase, \
     NonInjectableOrExternalErrCase, LackingAnnotationErrCase
 from tests.utils import build
@@ -600,3 +600,426 @@ def test_plan_custom_builder_not_externally_provided():
     assert error_causes(exc_info) == [
         ("item", [NonInjectableOrExternalErrCase("item", Page, [Item])])
     ]
+
+
+def test_reuse_1():
+    """Reuse[A] | B → B"""
+    class _A:
+        pass
+
+    class _B:
+        pass
+
+    class Input:
+
+        def __init__(self, a: Reuse[_A] | _B):
+            pass
+
+    plan = andi.plan(
+        Input,
+        is_injectable=lambda x: True,
+        externally_provided={_A, _B},
+    )
+    assert plan == [
+        (_B, {}),
+        (Input, {'a': _B})
+    ]
+    assert plan.full_final_kwargs
+
+
+def test_reuse_2():
+    """Reuse[A] | B, A → A"""
+    class _A:
+        pass
+
+    class _B:
+        pass
+
+    class Input:
+
+        def __init__(self, a: Reuse[_A] | _B, b: _A):
+            pass
+
+    plan = andi.plan(
+        Input,
+        is_injectable=lambda x: True,
+        externally_provided={_A, _B},
+    )
+    assert plan == [
+        (_A, {}),
+        (Input, {'a': _A, 'b': _A})
+    ]
+    assert plan.full_final_kwargs
+
+
+def test_reuse_3():
+    """A, Reuse[A] | B → A"""
+    class _A:
+        pass
+
+    class _B:
+        pass
+
+    class Input:
+
+        def __init__(self, a: _A, b: Reuse[_A] | _B):
+            pass
+
+    plan = andi.plan(
+        Input,
+        is_injectable=lambda x: True,
+        externally_provided={_A, _B},
+    )
+    assert plan == [
+        (_A, {}),
+        (Input, {'a': _A, 'b': _A})
+    ]
+    assert plan.full_final_kwargs
+
+
+def test_reuse_4():
+    """Reuse[A] | B, B → B"""
+    class _A:
+        pass
+
+    class _B:
+        pass
+
+    class Input:
+
+        def __init__(self, a: Reuse[_A] | _B, b: _B):
+            pass
+
+    plan = andi.plan(
+        Input,
+        is_injectable=lambda x: True,
+        externally_provided={_A, _B},
+    )
+    assert plan == [
+        (_B, {}),
+        (Input, {'a': _B, 'b': _B})
+    ]
+    assert plan.full_final_kwargs
+
+
+def test_reuse_5():
+    """B, Reuse[A] | B → B"""
+    class _A:
+        pass
+
+    class _B:
+        pass
+
+    class Input:
+
+        def __init__(self, a: _B, b: Reuse[_A] | _B):
+            pass
+
+    plan = andi.plan(
+        Input,
+        is_injectable=lambda x: True,
+        externally_provided={_A, _B},
+    )
+    assert plan == [
+        (_B, {}),
+        (Input, {'a': _B, 'b': _B})
+    ]
+    assert plan.full_final_kwargs
+
+
+def test_reuse_6():
+    """Reuse[A] | Reuse[B] | C → C"""
+    class _A:
+        pass
+
+    class _B:
+        pass
+
+    class _C:
+        pass
+
+    class Input:
+
+        def __init__(self, a: Reuse[_A] | Reuse[_B] | _C):
+            pass
+
+    plan = andi.plan(
+        Input,
+        is_injectable=lambda x: True,
+        externally_provided={_A, _B, _C},
+    )
+    assert plan == [
+        (_C, {}),
+        (Input, {'a': _C})
+    ]
+    assert plan.full_final_kwargs
+
+
+def test_reuse_7():
+    """A, Reuse[A] | Reuse[B] | C → A"""
+    class _A:
+        pass
+
+    class _B:
+        pass
+
+    class _C:
+        pass
+
+    class Input:
+
+        def __init__(self, a: _A, b: Reuse[_A] | Reuse[_B] | _C):
+            pass
+
+    plan = andi.plan(
+        Input,
+        is_injectable=lambda x: True,
+        externally_provided={_A, _B, _C},
+    )
+    assert plan == [
+        (_A, {}),
+        (Input, {'a': _A, 'b': _A})
+    ]
+    assert plan.full_final_kwargs
+
+
+def test_reuse_8():
+    """B, Reuse[A] | Reuse[B] | C → B"""
+    class _A:
+        pass
+
+    class _B:
+        pass
+
+    class _C:
+        pass
+
+    class Input:
+
+        def __init__(self, a: _B, b: Reuse[_A] | Reuse[_B] | _C):
+            pass
+
+    plan = andi.plan(
+        Input,
+        is_injectable=lambda x: True,
+        externally_provided={_A, _B, _C},
+    )
+    assert plan == [
+        (_B, {}),
+        (Input, {'a': _B, 'b': _B})
+    ]
+    assert plan.full_final_kwargs
+
+
+def test_reuse_9():
+    """Reuse[A] | Reuse[B] | C, A → A"""
+    class _A:
+        pass
+
+    class _B:
+        pass
+
+    class _C:
+        pass
+
+    class Input:
+
+        def __init__(self, a: Reuse[_A] | Reuse[_B] | _C, b: _A):
+            pass
+
+    plan = andi.plan(
+        Input,
+        is_injectable=lambda x: True,
+        externally_provided={_A, _B, _C},
+    )
+    assert plan == [
+        (_A, {}),
+        (Input, {'a': _A, 'b': _A})
+    ]
+    assert plan.full_final_kwargs
+
+
+def test_reuse_10():
+    """Reuse[A] | Reuse[B] | C, B → B"""
+    class _A:
+        pass
+
+    class _B:
+        pass
+
+    class _C:
+        pass
+
+    class Input:
+
+        def __init__(self, a: Reuse[_A] | Reuse[_B] | _C, b: _B):
+            pass
+
+    plan = andi.plan(
+        Input,
+        is_injectable=lambda x: True,
+        externally_provided={_A, _B, _C},
+    )
+    assert plan == [
+        (_B, {}),
+        (Input, {'a': _B, 'b': _B})
+    ]
+    assert plan.full_final_kwargs
+
+
+def test_reuse_11():
+    """Reuse[A] | Reuse[B] | C, A, B → A"""
+    class _A:
+        pass
+
+    class _B:
+        pass
+
+    class _C:
+        pass
+
+    class Input:
+
+        def __init__(self, a: Reuse[_A] | Reuse[_B] | _C, b: _A, c: _B):
+            pass
+
+    plan = andi.plan(
+        Input,
+        is_injectable=lambda x: True,
+        externally_provided={_A, _B, _C},
+    )
+    assert plan == [
+        (_A, {}),
+        (_B, {}),
+        (Input, {'a': _A, 'b': _A, 'c': _B})
+    ]
+    assert plan.full_final_kwargs
+
+
+def test_reuse_12():
+    """Reuse[A] | Reuse[B] | C, B, A → A"""
+    class _A:
+        pass
+
+    class _B:
+        pass
+
+    class _C:
+        pass
+
+    class Input:
+
+        def __init__(self, a: Reuse[_A] | Reuse[_B] | _C, b: _B, c: _A):
+            pass
+
+    plan = andi.plan(
+        Input,
+        is_injectable=lambda x: True,
+        externally_provided={_A, _B, _C},
+    )
+    assert plan == [
+        (_A, {}),
+        (_B, {}),
+        (Input, {'a': _A, 'b': _B, 'c': _A})
+    ]
+    assert plan.full_final_kwargs
+
+
+def test_reuse_13():
+    """A, B, Reuse[A] | Reuse[B] | C → A"""
+    class _A:
+        pass
+
+    class _B:
+        pass
+
+    class _C:
+        pass
+
+    class Input:
+
+        def __init__(self, a: _A, b: _B, c: Reuse[_A] | Reuse[_B] | _C):
+            pass
+
+    plan = andi.plan(
+        Input,
+        is_injectable=lambda x: True,
+        externally_provided={_A, _B, _C},
+    )
+    assert plan == [
+        (_A, {}),
+        (_B, {}),
+        (Input, {'a': _A, 'b': _B, 'c': _A})
+    ]
+    assert plan.full_final_kwargs
+
+
+def test_reuse_14():
+    """B, A, Reuse[A] | Reuse[B] | C → A"""
+    class _A:
+        pass
+
+    class _B:
+        pass
+
+    class _C:
+        pass
+
+    class Input:
+
+        def __init__(self, a: _B, b: _A, c: Reuse[_A] | Reuse[_B] | _C):
+            pass
+
+    plan = andi.plan(
+        Input,
+        is_injectable=lambda x: True,
+        externally_provided={_A, _B, _C},
+    )
+    assert plan == [
+        (_B, {}),
+        (_A, {}),
+        (Input, {'a': _B, 'b': _A, 'c': _A})
+    ]
+    assert plan.full_final_kwargs
+
+
+def test_reuse_15():
+    """Reuse[A] | Reuse[B] | C, Reuse[B] | Reuse[A] | C, A, B → A, B"""
+    class _A:
+        pass
+
+    class _B:
+        pass
+
+    class _C:
+        pass
+
+    class Input:
+
+        def __init__(self, a: Reuse[_A] | Reuse[_B] | _C, b: Reuse[_B] | Reuse[_A] | _C, c: _A, d: _B):
+            pass
+
+    plan = andi.plan(
+        Input,
+        is_injectable=lambda x: True,
+        externally_provided={_A, _B, _C},
+    )
+    assert plan == [
+        (_A, {}),
+        (_B, {}),
+        (Input, {'a': _A, 'b': _B, 'c': _A, 'd': _B})
+    ]
+    assert plan.full_final_kwargs
+
+
+# Scenarios to test:
+# Reuse[A] | Reuse[B] | C, Reuse[B] | Reuse[A] | C, B, A → A, B
+# A, B, Reuse[A] | Reuse[B] | C, Reuse[B] | Reuse[A] | C → A, B
+# B, A, Reuse[A] | Reuse[B] | C, Reuse[B] | Reuse[A] | C → A, B
+# Reuse[A] → Error?
+# Reuse[A] | None → None
+# Reuse[A], A → A
+# A, Reuse[A] → A
+# Nested scenarios
+# Scenarios involving _may_override (do we need to remove the reuse annotation before that?)
+# Do we treat extra annotation args as errors if the first arg is _REUSE_ANNOTATION?
