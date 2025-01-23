@@ -374,6 +374,52 @@ def test_plan_non_annotated_args():
     ]
 
 
+def test_plan_non_injectable_args():
+    class WithNonInjArgs:
+
+        def __init__(self, a: A, b: B, non_ann: Optional[str], non_ann_def: int = 0, *,
+                     non_ann_kw: Optional[str], non_ann_kw_def: int = 1):
+            pass
+
+    plan = andi.plan(
+        WithNonInjArgs.__init__,
+        is_injectable=ALL,
+        externally_provided={A}
+    )
+
+    assert dict(plan.dependencies) == {A: {}, B: {}}
+    assert _final_kwargs_spec(plan) == {'a': A, 'b': B}
+    assert not plan.full_final_kwargs
+
+    plan_class = andi.plan(WithNonInjArgs,
+                           is_injectable=ALL,
+                           externally_provided=[A])
+    assert plan_class.dependencies == plan.dependencies
+    assert _final_kwargs_spec(plan_class) == _final_kwargs_spec(plan)
+    assert not plan.full_final_kwargs
+
+    with pytest.raises(TypeError):
+        build(plan)
+
+    instances = build(plan.dependencies, instances_stock={A: ""})
+    o = WithNonInjArgs(non_ann=None, non_ann_kw=None,
+                       **plan.final_kwargs(instances))
+    assert isinstance(o, WithNonInjArgs)
+
+    with pytest.raises(andi.NonProvidableError) as ex_info:
+        andi.plan(WithNonInjArgs, is_injectable=ALL,
+                  externally_provided=[A], full_final_kwargs=True)
+    assert error_causes(ex_info) == [
+        ('non_ann', [NonInjectableOrExternalErrCase('non_ann', WithNonInjArgs, types=[str, type(None)])]),
+        ('non_ann_def', [NonInjectableOrExternalErrCase('non_ann_def',
+                                                  WithNonInjArgs, types=[int])]),
+        ('non_ann_kw', [NonInjectableOrExternalErrCase('non_ann_kw',
+                                                 WithNonInjArgs, types=[str, type(None)])]),
+        ('non_ann_kw_def', [NonInjectableOrExternalErrCase('non_ann_kw_def',
+                                                     WithNonInjArgs, types=[int])]),
+    ]
+
+
 @pytest.mark.parametrize("full_final_kwargs", [[True], [False]])
 def test_plan_no_args(full_final_kwargs):
     def fn():
