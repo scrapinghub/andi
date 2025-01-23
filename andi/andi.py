@@ -93,7 +93,10 @@ def _inspect(class_or_func: Callable) -> List[Tuple[str, List[Optional[Type]], b
             types = []
         else:
             types = [tp]
-        res.append((key, types, sig is not None and sig.parameters[key].default is not Parameter.empty))
+        has_default = False
+        if sig and key in sig.parameters and sig.parameters[key].default is not Parameter.empty:
+            has_default = True
+        res.append((key, types, has_default))
     return res
 
 
