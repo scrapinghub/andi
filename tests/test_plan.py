@@ -365,20 +365,16 @@ def test_plan_non_annotated_args():
                   externally_provided=[A], full_final_kwargs=True)
     assert error_causes(ex_info) == [
         ('non_ann', [LackingAnnotationErrCase('non_ann', WithNonAnnArgs)]),
-        ('non_ann_def', [LackingAnnotationErrCase('non_ann_def',
-                                                  WithNonAnnArgs)]),
         ('non_ann_kw', [LackingAnnotationErrCase('non_ann_kw',
                                                  WithNonAnnArgs)]),
-        ('non_ann_kw_def', [LackingAnnotationErrCase('non_ann_kw_def',
-                                                     WithNonAnnArgs)]),
     ]
 
 
 def test_plan_non_injectable_args():
     class WithNonInjArgs:
 
-        def __init__(self, a: A, b: B, non_ann: Optional[str], non_ann_def: int = 0, *,
-                     non_ann_kw: Optional[str], non_ann_kw_def: int = 1):
+        def __init__(self, a: A, b: B, non_inj: Optional[str], non_inj_def: int = 0, *,
+                     non_inj_kw: Optional[str], non_inj_kw_def: int = 1):
             pass
 
     plan = andi.plan(
@@ -402,7 +398,7 @@ def test_plan_non_injectable_args():
         build(plan)
 
     instances = build(plan.dependencies, instances_stock={A: ""})
-    o = WithNonInjArgs(non_ann=None, non_ann_kw=None,
+    o = WithNonInjArgs(non_inj=None, non_inj_kw=None,
                        **plan.final_kwargs(instances))
     assert isinstance(o, WithNonInjArgs)
 
@@ -410,13 +406,47 @@ def test_plan_non_injectable_args():
         andi.plan(WithNonInjArgs, is_injectable=ALL,
                   externally_provided=[A], full_final_kwargs=True)
     assert error_causes(ex_info) == [
-        ('non_ann', [NonInjectableOrExternalErrCase('non_ann', WithNonInjArgs, types=[str, type(None)])]),
-        ('non_ann_def', [NonInjectableOrExternalErrCase('non_ann_def',
-                                                  WithNonInjArgs, types=[int])]),
-        ('non_ann_kw', [NonInjectableOrExternalErrCase('non_ann_kw',
+        ('non_inj', [NonInjectableOrExternalErrCase('non_inj', WithNonInjArgs, types=[str, type(None)])]),
+        ('non_inj_kw', [NonInjectableOrExternalErrCase('non_inj_kw',
                                                  WithNonInjArgs, types=[str, type(None)])]),
-        ('non_ann_kw_def', [NonInjectableOrExternalErrCase('non_ann_kw_def',
-                                                     WithNonInjArgs, types=[int])]),
+    ]
+
+
+def test_plan_nested_non_injectable_args():
+    class NonInjParent:
+        def __init__(self, non_inj_def: int = 0, *, non_inj_kw_def: int = 1):
+            self.non_inj_def = non_inj_def
+            self.non_inj_kw_def = non_inj_kw_def
+
+    class WithNonInjArgs:
+
+        def __init__(self, non_inj_parent: NonInjParent):
+            self.non_inj_parent = non_inj_parent
+
+    plan = andi.plan(
+        WithNonInjArgs.__init__,
+        is_injectable={NonInjParent},
+    )
+
+    assert dict(plan.dependencies) == {NonInjParent: {}}
+    assert _final_kwargs_spec(plan) == {'non_inj_parent': NonInjParent}
+    assert plan.full_final_kwargs
+
+    with pytest.raises(TypeError):
+        build(plan)
+
+    instances = build(plan.dependencies)
+    o = WithNonInjArgs(**plan.final_kwargs(instances))
+    assert isinstance(o, WithNonInjArgs)
+    assert o.non_inj_parent.non_inj_def == 0
+    assert o.non_inj_parent.non_inj_kw_def == 1
+
+    with pytest.raises(andi.NonProvidableError) as ex_info:
+        andi.plan(WithNonInjArgs, is_injectable=ALL,
+                  externally_provided=[A], full_final_kwargs=True)
+    assert error_causes(ex_info) == [
+        ('non_inj_parent', [NonInjectableOrExternalErrCase('non_inj_parent',
+                                                  WithNonInjArgs, types=[NonInjParent])]),
     ]
 
 
