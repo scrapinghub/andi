@@ -1,7 +1,8 @@
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
+from inspect import signature, Parameter
 from typing import (
-    Dict, List, Optional, Type, Callable, Union, Container,
+    Dict, List, Optional, Set, Type, Callable, Union, Container,
     Tuple, MutableMapping, Any, Mapping)
 
 from andi.typeutils import (
@@ -51,6 +52,20 @@ def inspect(class_or_func: Callable) -> Dict[str, List[Optional[Type]]]:
         else:
             res[key] = [tp]
     return res
+
+
+def _params_with_default_value(class_or_func: Callable) -> Set[str]:
+    """Return a set with the names of the parameters of *class_or_func* that
+    have a default value."""
+    result: Set[str] = set()
+    try:
+        sig = signature(class_or_func)
+    except ValueError:  # e.g. built-in types.
+        return result
+    for name, metadata in sig.parameters.items():
+        if metadata.default is not Parameter.empty:
+            result.add(name)
+    return result
 
 
 ContainerOrCallableType = Union[
@@ -357,6 +372,7 @@ def _plan(class_or_func: Callable, *,
 
     dependency_stack = dependency_stack + [plan_key]
     arguments = inspect(class_or_func)
+    have_default = _params_with_default_value(class_or_func)
 
     args_errs = defaultdict(list)  # type: Dict[str, List[Tuple]]
     non_injectable_errs = defaultdict(list)  # type: Dict[str, List[Tuple]]
@@ -402,7 +418,7 @@ def _plan(class_or_func: Callable, *,
                 args_errs[argname].extend(errors)
             else:
                 type_for_arg[argname] = sel_cls
-        else:
+        elif argname not in have_default:
             if not types:
                 err_case = LackingAnnotationErrCase(argname, class_or_func)  # type: Tuple
             else:
