@@ -1,6 +1,13 @@
 Changes
 =======
 
+0.7.0 (unreleased)
+------------------
+
+* Drop support for Python 3.8, add support for Python 3.13.
+* Non-typed and non-injectable parameters with a default value no longer
+  trigger an error when building a plan.
+
 0.6.0 (2023-12-26)
 ------------------
 
