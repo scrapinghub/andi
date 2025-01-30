@@ -2,7 +2,7 @@ from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from inspect import signature, Parameter
 from typing import (
-    Dict, List, Optional, Type, Callable, Union, Container,
+    Dict, List, Optional, Set, Type, Callable, Union, Container,
     Tuple, MutableMapping, Any, Mapping)
 
 from andi.typeutils import (
@@ -54,50 +54,18 @@ def inspect(class_or_func: Callable) -> Dict[str, List[Optional[Type]]]:
     return res
 
 
-def _inspect(class_or_func: Callable) -> List[Tuple[str, List[Optional[Type]], bool]]:
-    """
-    Return a list of tuples, 1 tuple per parameter of *class_or_func*, where
-    each tuple contains the parameter name, a list of possible types, and
-    whether or not the parameter has a default value.
-
-    .. note:: It is a modified version of :func:`inspect` to also indicate
-        whether parameters have a default value or not.
-
-    Non annotated parameters are also returned with an empty list of possible
-    types.
-
-    ``class_or_func`` can be
-
-    * a function
-    * a class - in this case ``cls.__init__`` annotations are returned
-    * a callable object - in this case ``obj.__call__`` annotations
-      are returned
-    """
-    func = get_callable_func_obj(class_or_func)
-    globalns = get_globalns(func)
-    annotations = get_type_hints_with_extras(func, globalns)
-    for name in get_unannotated_params(func, annotations):
-        annotations[name] = None
-    annotations.pop('return', None)
-    annotations.pop('self', None)  # FIXME: pop first argument of methods
-    annotations.pop('cls', None)
+def _params_with_default_value(class_or_func: Callable) -> Set[str]:
+    """Return a set with the names of the parameters of *class_or_func* that
+    have a default value."""
+    result: Set[str] = set()
     try:
         sig = signature(class_or_func)
     except ValueError:  # e.g. built-in types.
-        sig = None
-    res = []
-    for key, tp in annotations.items():
-        if is_union(tp):
-            types = get_union_args(tp)
-        elif tp is None:
-            types = []
-        else:
-            types = [tp]
-        has_default = False
-        if sig and key in sig.parameters and sig.parameters[key].default is not Parameter.empty:
-            has_default = True
-        res.append((key, types, has_default))
-    return res
+        return result
+    for name, metadata in sig.parameters.items():
+        if metadata.default is not Parameter.empty:
+            result.add(name)
+    return result
 
 
 ContainerOrCallableType = Union[
@@ -403,11 +371,12 @@ def _plan(class_or_func: Callable, *,
         return Plan(), [CyclicDependencyErrCase(class_or_func, dependency_stack)]
 
     dependency_stack = dependency_stack + [plan_key]
-    arguments = _inspect(class_or_func)
+    arguments = inspect(class_or_func)
+    have_default = _params_with_default_value(class_or_func)
 
     args_errs = defaultdict(list)  # type: Dict[str, List[Tuple]]
     non_injectable_errs = defaultdict(list)  # type: Dict[str, List[Tuple]]
-    for argname, types, has_default in arguments:
+    for argname, types in arguments.items():
         sel_cls, arg_overrides = _select_type(
             types, is_injectable, externally_provided, overrides, recursive_overrides,
             custom_builder_fn
@@ -449,7 +418,7 @@ def _plan(class_or_func: Callable, *,
                 args_errs[argname].extend(errors)
             else:
                 type_for_arg[argname] = sel_cls
-        elif not has_default:
+        elif argname not in have_default:
             if not types:
                 err_case = LackingAnnotationErrCase(argname, class_or_func)  # type: Tuple
             else:
