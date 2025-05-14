@@ -2,7 +2,11 @@ from typing import Union, Optional, get_type_hints, Annotated
 
 import pytest
 
-from andi.typeutils import get_union_args, get_callable_func_obj, get_type_hints_with_extras
+from andi.typeutils import (
+    get_union_args,
+    get_callable_func_obj,
+    get_type_hints_with_extras,
+)
 
 
 def test_get_union_args():
@@ -21,7 +25,6 @@ def test_get_callable_func_obj_functions():
 
 
 def test_get_callable_func_obj_class():
-
     class Foo:
         x = 5
 
@@ -86,7 +89,7 @@ def test_get_hint_extras():
         pass
 
     hints = get_type_hints(f)
-    assert hints["x"] == int
+    assert hints["x"] is int
 
     hints_annotated = get_type_hints_with_extras(f)
     assert hints_annotated["x"] == Annotated[int, 42]

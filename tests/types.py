@@ -5,7 +5,7 @@ import attr
 
 @attr.s(auto_attribs=True)
 class A_36:
-    b: 'B_36'
+    b: "B_36"
 
 
 @attr.s(auto_attribs=True)
@@ -15,7 +15,7 @@ class B_36:
 
 @dataclass
 class ADCnp:
-    b: 'BDCnp'
+    b: "BDCnp"
 
 
 @dataclass
