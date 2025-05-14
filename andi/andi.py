@@ -13,6 +13,7 @@ from typing import (
     Tuple,
     Any,
     Mapping,
+    MutableMapping,  # noqa: F401
 )
 
 from andi.typeutils import (
