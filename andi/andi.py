@@ -2,8 +2,19 @@ from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from inspect import signature, Parameter
 from typing import (
-    Dict, List, Optional, Set, Type, Callable, Union, Container,
-    Tuple, MutableMapping, Any, Mapping)
+    Dict,
+    List,
+    Optional,
+    Set,
+    Type,
+    Callable,
+    Union,
+    Container,
+    Tuple,
+    Any,
+    Mapping,
+    MutableMapping,  # noqa: F401
+)
 
 from andi.typeutils import (
     get_union_args,
@@ -18,7 +29,7 @@ from andi.errors import (
     NonProvidableError,
     CyclicDependencyErrCase,
     LackingAnnotationErrCase,
-    NonInjectableOrExternalErrCase
+    NonInjectableOrExternalErrCase,
 )
 
 
@@ -40,9 +51,9 @@ def inspect(class_or_func: Callable) -> Dict[str, List[Optional[Type]]]:
     annotations = get_type_hints_with_extras(func, globalns)
     for name in get_unannotated_params(func, annotations):
         annotations[name] = None
-    annotations.pop('return', None)
-    annotations.pop('self', None)  # FIXME: pop first argument of methods
-    annotations.pop('cls', None)
+    annotations.pop("return", None)
+    annotations.pop("self", None)  # FIXME: pop first argument of methods
+    annotations.pop("cls", None)
     res = {}
     for key, tp in annotations.items():
         if is_union(tp):
@@ -68,10 +79,7 @@ def _params_with_default_value(class_or_func: Callable) -> Set[str]:
     return result
 
 
-ContainerOrCallableType = Union[
-    Container[Callable],
-    Callable[[Callable], bool]
-]
+ContainerOrCallableType = Union[Container[Callable], Callable[[Callable], bool]]
 
 
 class KwargsSpec(Dict[str, Callable]):
@@ -149,15 +157,17 @@ class Plan(List[Step]):
 OverrideFn = Callable[[Callable], Optional[Callable]]
 
 
-def plan(class_or_func: Callable, *,
-         is_injectable: ContainerOrCallableType,
-         externally_provided: Optional[ContainerOrCallableType] = None,
-         full_final_kwargs=False,
-         overrides: Optional[OverrideFn] = None,
-         recursive_overrides: bool = False,
-         custom_builder_fn: Callable[[Callable], Optional[Callable]] = lambda _: None
-         ) -> Plan:
-    """ Plan the sequence of instantiation steps required to fulfill the
+def plan(
+    class_or_func: Callable,
+    *,
+    is_injectable: ContainerOrCallableType,
+    externally_provided: Optional[ContainerOrCallableType] = None,
+    full_final_kwargs=False,
+    overrides: Optional[OverrideFn] = None,
+    recursive_overrides: bool = False,
+    custom_builder_fn: Callable[[Callable], Optional[Callable]] = lambda _: None,
+) -> Plan:
+    """Plan the sequence of instantiation steps required to fulfill the
     the arguments of the given function or the arguments of its
     constructor if a class is given instead. In other words, this function
     makes dependency injection easy. Type annotations are used
@@ -214,8 +224,8 @@ def plan(class_or_func: Callable, *,
         )
 
     Any type found in the dependency tree that is injectable can as well
-    has its own dependencies. If the planner fails to fulfill the dependencies 
-    of any injectable found in the tree, ``NonProvidableError`` is raised, 
+    has its own dependencies. If the planner fails to fulfill the dependencies
+    of any injectable found in the tree, ``NonProvidableError`` is raised,
     regardless of a value of ``full_final_kwargs``
     argument (even if full_final_kwargs=False).
 
@@ -321,17 +331,20 @@ def plan(class_or_func: Callable, *,
     is_injectable = _ensure_can_provide_func(is_injectable)
     externally_provided = _ensure_can_provide_func(externally_provided)
     overrides = overrides or _empty_overrides
-    class_or_func, overrides = _may_override(class_or_func, overrides, recursive_overrides)
+    class_or_func, overrides = _may_override(
+        class_or_func, overrides, recursive_overrides
+    )
 
-    plan, _ = _plan(class_or_func,
-                    is_injectable=is_injectable,
-                    externally_provided=externally_provided,
-                    full_final_kwargs=full_final_kwargs,
-                    dependency_stack=None,
-                    overrides=overrides,
-                    recursive_overrides=recursive_overrides,
-                    custom_builder_fn=custom_builder_fn,
-                    )
+    plan, _ = _plan(
+        class_or_func,
+        is_injectable=is_injectable,
+        externally_provided=externally_provided,
+        full_final_kwargs=full_final_kwargs,
+        dependency_stack=None,
+        overrides=overrides,
+        recursive_overrides=recursive_overrides,
+        custom_builder_fn=custom_builder_fn,
+    )
     return plan
 
 
@@ -341,16 +354,18 @@ class CustomBuilder:
     factory: Callable
 
 
-def _plan(class_or_func: Callable, *,
-          is_injectable: Callable[[Callable], bool],
-          externally_provided: Callable[[Callable], bool],
-          full_final_kwargs,
-          dependency_stack=None,
-          overrides: Callable[[Callable], Optional[Callable]],
-          recursive_overrides: bool = False,
-          custom_builder_fn: Callable[[Callable], Optional[Callable]] = lambda _: None,
-          custom_builder_result: Optional[Callable] = None
-          ) -> Tuple[Plan, List[Tuple]]:
+def _plan(
+    class_or_func: Callable,
+    *,
+    is_injectable: Callable[[Callable], bool],
+    externally_provided: Callable[[Callable], bool],
+    full_final_kwargs,
+    dependency_stack=None,
+    overrides: Callable[[Callable], Optional[Callable]],
+    recursive_overrides: bool = False,
+    custom_builder_fn: Callable[[Callable], Optional[Callable]] = lambda _: None,
+    custom_builder_result: Optional[Callable] = None,
+) -> Tuple[Plan, List[Tuple]]:
     dependency_stack = dependency_stack or []
     is_root_call = not dependency_stack  # For better code reading
     plan_od = OrderedDict()  # type: MutableMapping[Union[Callable, CustomBuilder], KwargsSpec]
@@ -365,7 +380,11 @@ def _plan(class_or_func: Callable, *,
         plan_key = CustomBuilder(custom_builder_result, class_or_func)
 
     # At this point the class/function must be injectable or built by a custom builder for non root cases
-    assert is_root_call or custom_builder_result or is_injectable(strip_annotated(class_or_func))
+    assert (
+        is_root_call
+        or custom_builder_result
+        or is_injectable(strip_annotated(class_or_func))
+    )
 
     if class_or_func in dependency_stack:
         return Plan(), [CyclicDependencyErrCase(class_or_func, dependency_stack)]
@@ -378,8 +397,12 @@ def _plan(class_or_func: Callable, *,
     non_injectable_errs = defaultdict(list)  # type: Dict[str, List[Tuple]]
     for argname, types in arguments.items():
         sel_cls, arg_overrides = _select_type(
-            types, is_injectable, externally_provided, overrides, recursive_overrides,
-            custom_builder_fn
+            types,
+            is_injectable,
+            externally_provided,
+            overrides,
+            recursive_overrides,
+            custom_builder_fn,
         )
         if sel_cls is not None:
             errors = []  # type: List[Tuple]
@@ -403,16 +426,17 @@ def _plan(class_or_func: Callable, *,
                             custom_builder = None
                             break
                 if run_plan:
-                    plan, errors = _plan(custom_builder or sel_cls,
-                                         is_injectable=is_injectable,
-                                         externally_provided=externally_provided,
-                                         full_final_kwargs=True,
-                                         dependency_stack=dependency_stack,
-                                         overrides=arg_overrides,
-                                         recursive_overrides=recursive_overrides,
-                                         custom_builder_fn=custom_builder_fn,
-                                         custom_builder_result=sel_cls if custom_builder else None,
-                                         )
+                    plan, errors = _plan(
+                        custom_builder or sel_cls,
+                        is_injectable=is_injectable,
+                        externally_provided=externally_provided,
+                        full_final_kwargs=True,
+                        dependency_stack=dependency_stack,
+                        overrides=arg_overrides,
+                        recursive_overrides=recursive_overrides,
+                        custom_builder_fn=custom_builder_fn,
+                        custom_builder_result=sel_cls if custom_builder else None,
+                    )
                     plan_od.update(plan)
             if errors:
                 args_errs[argname].extend(errors)
@@ -422,8 +446,7 @@ def _plan(class_or_func: Callable, *,
             if not types:
                 err_case = LackingAnnotationErrCase(argname, class_or_func)  # type: Tuple
             else:
-                err_case = NonInjectableOrExternalErrCase(argname, class_or_func,
-                                                          types)
+                err_case = NonInjectableOrExternalErrCase(argname, class_or_func, types)
             non_injectable_errs[argname].append(err_case)
 
     # Error managing
@@ -436,31 +459,31 @@ def _plan(class_or_func: Callable, *,
     if not args_errs:
         plan_od[plan_key] = type_for_arg
     plan = Plan(plan_od.items(), full_final_kwargs=not non_injectable_errs)
-    flatten_errors = [error
-                      for errors in args_errs.values()
-                      for error in errors]
+    flatten_errors = [error for errors in args_errs.values() for error in errors]
     return plan, flatten_errors
 
 
-def _select_type(types,
-                 is_injectable: Callable[[Callable], bool],
-                 externally_provided: Callable[[Callable], bool],
-                 overrides: Callable[[Callable], Optional[Callable]],
-                 recursive_overrides: bool,
-                 custom_builder_fn: Callable[[Callable], Optional[Callable]] = lambda _: None,
-                 ) -> Tuple[Optional[Callable], OverrideFn]:
+def _select_type(
+    types,
+    is_injectable: Callable[[Callable], bool],
+    externally_provided: Callable[[Callable], bool],
+    overrides: Callable[[Callable], Optional[Callable]],
+    recursive_overrides: bool,
+    custom_builder_fn: Callable[[Callable], Optional[Callable]] = lambda _: None,
+) -> Tuple[Optional[Callable], OverrideFn]:
     """
     Choose the first type that can be provided. None otherwise. Also return
     the overrides function to be used from now on.
     """
     for candidate in types:
         candidate, new_overrides = _may_override(
-            candidate, overrides, recursive_overrides)
+            candidate, overrides, recursive_overrides
+        )
         candidate_stripped = strip_annotated(candidate)
         if (
-                is_injectable(candidate_stripped)
-                or externally_provided(candidate_stripped)
-                or custom_builder_fn(candidate_stripped) is not None
+            is_injectable(candidate_stripped)
+            or externally_provided(candidate_stripped)
+            or custom_builder_fn(candidate_stripped) is not None
         ):
             return candidate, new_overrides
     return None, overrides
@@ -470,8 +493,9 @@ def _empty_overrides(class_or_func: Callable) -> Optional[Callable]:
     return None
 
 
-def _may_override(class_or_func, overrides: OverrideFn, recursive_overrides: bool
-                  ) -> Tuple[Callable, OverrideFn]:
+def _may_override(
+    class_or_func, overrides: OverrideFn, recursive_overrides: bool
+) -> Tuple[Callable, OverrideFn]:
     """
     May override ``class_or_func`` if ``overrides`` function suggest it.
     In such a case, ``overrides`` function is replaced with ``_empty_overrides``
@@ -485,8 +509,9 @@ def _may_override(class_or_func, overrides: OverrideFn, recursive_overrides: boo
     return class_or_func, overrides_for_children
 
 
-def _ensure_can_provide_func(cont_or_call: Optional[ContainerOrCallableType]
-                             ) -> Callable[[Callable], bool]:
+def _ensure_can_provide_func(
+    cont_or_call: Optional[ContainerOrCallableType],
+) -> Callable[[Callable], bool]:
     if cont_or_call is None:
         return lambda x: False
     if isinstance(cont_or_call, Container):

@@ -22,7 +22,7 @@ class ADC:
 
 @dataclass
 class ADCStrRef:
-    b: 'BDC'
+    b: "BDC"
 
 
 @dataclass
