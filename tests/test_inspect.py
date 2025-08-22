@@ -29,51 +29,52 @@ def test_andi():
         pass
 
     assert andi.inspect(Foo.__init__) == {}
-    assert andi.inspect(func1) == {'x': [Foo]}
+    assert andi.inspect(func1) == {"x": [Foo]}
     assert andi.inspect(func2) == {}
-    assert andi.inspect(func3) == {'x': [Bar], 'y': [Foo]}
+    assert andi.inspect(func3) == {"x": [Bar], "y": [Foo]}
 
 
 def test_union():
     def func(x: Union[Foo, Bar]):
         pass
 
-    assert andi.inspect(func) == {'x': [Foo, Bar]}
+    assert andi.inspect(func) == {"x": [Foo, Bar]}
 
 
 def test_optional():
     def func(x: Optional[Foo]):
         pass
 
-    assert andi.inspect(func) == {'x': [Foo, type(None)]}
+    assert andi.inspect(func) == {"x": [Foo, type(None)]}
 
 
 def test_optional_union():
     def func(x: Optional[Union[Foo, Baz]]):
         pass
 
-    assert andi.inspect(func) == {'x': [Foo, Baz, type(None)]}
+    assert andi.inspect(func) == {"x": [Foo, Baz, type(None)]}
 
 
 def test_not_annotated():
     def func(x):
         pass
 
-    assert andi.inspect(func) == {'x': []}
+    assert andi.inspect(func) == {"x": []}
 
 
 def test_string_types():
-    def func(x: 'Bar'):
+    def func(x: "Bar"):
         pass
-    assert andi.inspect(func) == {'x': [Bar]}
+
+    assert andi.inspect(func) == {"x": [Bar]}
 
 
 def test_string_types_with_fn():
-    """ String type references not supported for __init__ in classes declared
-    within functions """
+    """String type references not supported for __init__ in classes declared
+    within functions"""
 
     class Fuu:
-        def __init__(self, bur :'Bur'):
+        def __init__(self, bur: "Bur"):
             pass
 
     class Bur:
@@ -88,19 +89,19 @@ def test_init_methods():
         def __init__(self, x: Foo):
             self.x = x
 
-    assert andi.inspect(MyClass.__init__) == {'x': [Foo]}
-    assert andi.inspect(MyClass) == {'x': [Foo]}
+    assert andi.inspect(MyClass.__init__) == {"x": [Foo]}
+    assert andi.inspect(MyClass) == {"x": [Foo]}
 
 
 def test_classmethod():
-    T = TypeVar('T')
+    T = TypeVar("T")
 
     class MyClass:
         @classmethod
         def from_foo(cls: Type[T], foo: Foo) -> T:
             return cls()
 
-    assert andi.inspect(MyClass.from_foo) == {'foo': [Foo]}
+    assert andi.inspect(MyClass.from_foo) == {"foo": [Foo]}
 
 
 def test_decorated():
@@ -108,13 +109,14 @@ def test_decorated():
         @wraps(fn)
         def wrapper(*args, **kwargs):
             return fn(*args, **kwargs)
+
         return wrapper
 
     @decorator
-    def func(x: 'Bar'):
+    def func(x: "Bar"):
         pass
 
-    assert andi.inspect(func) == {'x': [Bar]}
+    assert andi.inspect(func) == {"x": [Bar]}
 
 
 @pytest.mark.xfail(reason="functools.partial support is not implemented")
@@ -123,7 +125,7 @@ def test_partial():
         pass
 
     func_nofoo = partial(func, x=Foo())
-    assert andi.inspect(func_nofoo) == {'y': [Bar]}
+    assert andi.inspect(func_nofoo) == {"y": [Bar]}
 
 
 def test_callable_object():
@@ -132,7 +134,7 @@ def test_callable_object():
             pass
 
     obj = MyClass()
-    assert andi.inspect(obj) == {'x': [Bar]}
+    assert andi.inspect(obj) == {"x": [Bar]}
 
 
 def test_annotations():
