@@ -1,6 +1,14 @@
 Changes
 =======
 
+0.8.0 (unreleased)
+------------------
+
+* Add support for Python 3.14.
+* Move the build system to ``hatchling``.
+* Explicitly re-export public names.
+* Linting and CI improvements.
+
 0.7.0 (2025-01-30)
 ------------------
 
