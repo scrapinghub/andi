@@ -159,7 +159,7 @@ def get_callable_func_obj(class_or_func: Callable) -> Callable:
                 "%r is passed" % (class_or_func,)
             )
         if hasattr(class_or_func, "__call__"):
-            return class_or_func.__call__  # type: ignore
+            return class_or_func.__call__
         else:
             # not sure how to trigger it
             raise TypeError("Unexpected callable object %r" % (class_or_func,))

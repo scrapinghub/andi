@@ -56,3 +56,4 @@ include = [
 
 [tool.mypy]
 implicit_reexport = false
+warn_unused_ignores = true
