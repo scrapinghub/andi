@@ -1,20 +1,9 @@
-import sys
-import inspect
-import types
 import functools
-from typing import (
-    Annotated,
-    Union,
-    List,
-    Callable,
-    Dict,
-    Container,
-    cast,
-    Type,
-    get_args,
-    get_origin,
-    get_type_hints,
-)
+import inspect
+import sys
+import types
+from collections.abc import Callable, Container
+from typing import Annotated, Union, get_args, get_origin, get_type_hints
 
 
 def is_union(tp) -> bool:
@@ -26,7 +15,7 @@ def is_union(tp) -> bool:
     False
     >>> is_union(Union)
     False
-    >>> is_union(List[str])
+    >>> is_union(list[str])
     False
     """
     return hasattr(tp, "__origin__") and tp.__origin__ is Union
@@ -40,7 +29,7 @@ def get_type_hints_with_extras(obj, *args, **kwargs):
     return get_type_hints(obj, *args, **kwargs)
 
 
-def get_union_args(tp) -> List:
+def get_union_args(tp) -> list:
     """Return a list of typing.Union args."""
     return list(tp.__args__)
 
@@ -62,7 +51,7 @@ def issubclass_safe(cls, bases) -> bool:
         return False
 
 
-def get_unannotated_params(func, annotations: Container) -> List[str]:
+def get_unannotated_params(func, annotations: Container) -> list[str]:
     """Return a list of ``func`` argument names which are not type annotated.
 
     ``annotations`` should be a result of get_type_hints call for ``func``.
@@ -85,7 +74,7 @@ def get_unannotated_params(func, annotations: Container) -> List[str]:
     return res
 
 
-def get_globalns(func: Callable) -> Dict:
+def get_globalns(func: Callable) -> dict:
     """Return the global namespace that will be used for the resolution
     of postponed type annotations.
 
@@ -97,31 +86,30 @@ def get_globalns(func: Callable) -> Dict:
     return ns
 
 
-def _get_globalns_as_get_type_hints(func: Callable) -> Dict:
+def _get_globalns_as_get_type_hints(func: Callable) -> dict:
     """Global namespace resolution extracted from ``get_type_hints`` method.
     Python 3.7 (https://github.com/python/cpython/blob/3.7/Lib/typing.py#L981-L988)
     Note that this is only supporting functions as input."""
     nsobj = func
     # Find globalns for the unwrapped object.
     while hasattr(nsobj, "__wrapped__"):
-        nsobj = getattr(nsobj, "__wrapped__")
+        nsobj = nsobj.__wrapped__
     return getattr(nsobj, "__globals__", {})
 
 
-def _get_globalns_for_attrs(func: Callable) -> Dict:
+def _get_globalns_for_attrs(func: Callable) -> dict:
     """Adds partial support for postponed type annotations in attrs classes.
     Also required to support attrs classes when
     ``from __future__ import annotations`` is used (default for python 4.0).
     See https://github.com/python-attrs/attrs/issues/593"""
     if getattr(func, "__module__", None) in sys.modules:
         return dict(sys.modules[func.__module__].__dict__)
-    else:
-        # Theoretically this can happen if someone writes
-        # a custom string to func.__module__.  In which case
-        # such attrs might not be fully introspectable
-        # (w.r.t. typing.get_type_hints) but will still function
-        # correctly.
-        return {}
+    # Theoretically this can happen if someone writes
+    # a custom string to func.__module__.  In which case
+    # such attrs might not be fully introspectable
+    # (w.r.t. typing.get_type_hints) but will still function
+    # correctly.
+    return {}
 
 
 # from typing module (near get_type_hints), but without ModuleType
@@ -142,27 +130,23 @@ def get_callable_func_obj(class_or_func: Callable) -> Callable:
     supported by ``get_type_hints``.
     """
     if not callable(class_or_func):
-        raise TypeError("%r is not callable" % (class_or_func,))
-    is_class = isinstance(class_or_func, type)
-    if is_class:
-        cls = cast(Type, class_or_func)
-        return cls.__init__
-    else:
-        # we need to check some exact types, because some function-like
-        # object also have __call__ method, while it is better
-        # not to use it, as get_type_hints support these objects as-is
-        if isinstance(class_or_func, _FUNCTION_TYPES):
-            return class_or_func
-        if isinstance(class_or_func, functools.partial):
-            raise NotImplementedError(
-                "functools.partial support is not implemented; "
-                "%r is passed" % (class_or_func,)
-            )
-        if hasattr(class_or_func, "__call__"):
-            return class_or_func.__call__
-        else:
-            # not sure how to trigger it
-            raise TypeError("Unexpected callable object %r" % (class_or_func,))
+        raise TypeError(f"{class_or_func!r} is not callable")
+    if isinstance(class_or_func, type):
+        # see https://github.com/python/typing/discussions/1331
+        return class_or_func.__init__  # type: ignore[misc]
+    # we need to check some exact types, because some function-like
+    # object also have __call__ method, while it is better
+    # not to use it, as get_type_hints support these objects as-is
+    if isinstance(class_or_func, _FUNCTION_TYPES):
+        return class_or_func
+    if isinstance(class_or_func, functools.partial):
+        raise NotImplementedError(
+            f"functools.partial support is not implemented; {class_or_func!r} is passed"
+        )
+    if hasattr(class_or_func, "__call__"):  # noqa: B004
+        return class_or_func.__call__
+    # not sure how to trigger it
+    raise TypeError(f"Unexpected callable object {class_or_func!r}")
 
 
 def is_typing_annotated(o: Callable) -> bool:
@@ -174,5 +158,4 @@ def strip_annotated(o: Callable) -> Callable:
     """Return the underlying type for Annotated, the input itself otherwise."""
     if is_typing_annotated(o):
         return get_args(o)[0]
-    else:
-        return o
+    return o

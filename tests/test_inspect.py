@@ -1,5 +1,5 @@
-from functools import wraps, partial
-from typing import Union, Optional, TypeVar, Type, Annotated
+from functools import partial, wraps
+from typing import Annotated, Optional, TypeVar, Union
 
 import pytest
 
@@ -35,21 +35,21 @@ def test_andi():
 
 
 def test_union():
-    def func(x: Union[Foo, Bar]):
+    def func(x: Union[Foo, Bar]):  # noqa: UP007
         pass
 
     assert andi.inspect(func) == {"x": [Foo, Bar]}
 
 
 def test_optional():
-    def func(x: Optional[Foo]):
+    def func(x: Optional[Foo]):  # noqa: UP045
         pass
 
     assert andi.inspect(func) == {"x": [Foo, type(None)]}
 
 
 def test_optional_union():
-    def func(x: Optional[Union[Foo, Baz]]):
+    def func(x: Optional[Union[Foo, Baz]]):  # noqa: UP007, UP045
         pass
 
     assert andi.inspect(func) == {"x": [Foo, Baz, type(None)]}
@@ -98,7 +98,7 @@ def test_classmethod():
 
     class MyClass:
         @classmethod
-        def from_foo(cls: Type[T], foo: Foo) -> T:
+        def from_foo(cls: type[T], foo: Foo) -> T:  # noqa: PYI019
             return cls()
 
     assert andi.inspect(MyClass.from_foo) == {"foo": [Foo]}

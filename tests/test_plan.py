@@ -1,5 +1,7 @@
+from collections import OrderedDict
+from collections.abc import Callable
 from functools import partial
-from typing import Union, Optional, Dict, Callable, Annotated
+from typing import Annotated, Optional, Union
 
 import pytest
 
@@ -8,11 +10,10 @@ from andi import NonProvidableError
 from andi.andi import CustomBuilder
 from andi.errors import (
     CyclicDependencyErrCase,
-    NonInjectableOrExternalErrCase,
     LackingAnnotationErrCase,
+    NonInjectableOrExternalErrCase,
 )
 from tests.utils import build
-from collections import OrderedDict
 
 
 class A:
@@ -99,7 +100,7 @@ def test_cyclic_dependency():
 
 
 @pytest.mark.parametrize(
-    "cls,is_injectable,externally_provided",
+    ("cls", "is_injectable", "externally_provided"),
     [
         (E, ALL, SOME),
         (C, SOME, ALL),
@@ -111,7 +112,7 @@ def test_plan_similar_for_class_or_func(cls, is_injectable, externally_provided)
     externally_provided = externally_provided + [
         cl.__init__ for cl in externally_provided
     ]
-    external_deps = {cl: "external" for cl in externally_provided}
+    external_deps = dict.fromkeys(externally_provided, "external")
 
     plan_cls = andi.plan(
         cls, is_injectable=is_injectable, externally_provided=externally_provided
@@ -174,7 +175,7 @@ def test_cannot_be_provided():
 
 
 def test_plan_with_optionals():
-    def fn(a: Optional[str]):
+    def fn(a: Optional[str]):  # noqa: UP045
         assert a is None
         return "invoked!"
 
@@ -200,7 +201,7 @@ def test_plan_with_optionals():
 
 def test_plan_with_union():
     class WithUnion:
-        def __init__(self, a_or_b: Union[A, B]):
+        def __init__(self, a_or_b: Union[A, B]):  # noqa: UP007
             pass
 
     plan = andi.plan(
@@ -235,7 +236,7 @@ def test_plan_with_union():
 
 
 def test_plan_with_optionals_and_union():
-    def fn(str_or_b_or_None: Optional[Union[str, B]]):
+    def fn(str_or_b_or_None: Optional[Union[str, B]]):  # noqa: UP007,UP045
         return str_or_b_or_None
 
     plan = andi.plan(fn, is_injectable={str, B, type(None)})
@@ -385,10 +386,10 @@ def test_plan_non_injectable_args():
             self,
             a: A,
             b: B,
-            non_inj: Optional[str],
+            non_inj: Optional[str],  # noqa: UP045
             non_inj_def: int = 0,
             *,
-            non_inj_kw: Optional[str],
+            non_inj_kw: Optional[str],  # noqa: UP045
             non_inj_kw_def: int = 1,
         ):
             pass
@@ -503,7 +504,7 @@ def test_plan_no_args(full_final_kwargs):
 @pytest.mark.parametrize("full_final_kwargs", [[True], [False]])
 def test_plan_use_fn_as_annotations(full_final_kwargs):
     def fn_ann(b: B):
-        setattr(b, "modified", True)
+        b.modified = True  # type: ignore[attr-defined]
         return b
 
     def fn(b: fn_ann):
@@ -535,11 +536,10 @@ def test_plan_overrides(recursive_overrides):
     plan = plan_fn(
         C, is_injectable=ALL, externally_provided=[A], overrides={A: B, B: A}.get
     )
-    assert plan == [(B, {}), (A, {}), (C, {"a": B, "b": A})] or plan == [
-        (A, {}),
-        (B, {}),
-        (C, {"a": B, "b": A}),
-    ]
+    assert plan in (
+        [(B, {}), (A, {}), (C, {"a": B, "b": A})],
+        [(A, {}), (B, {}), (C, {"a": B, "b": A})],
+    )
 
     # Check cycle detection
     with pytest.raises(NonProvidableError) as exec_info:
@@ -572,12 +572,10 @@ def test_plan_overrides(recursive_overrides):
             C, is_injectable=ALL, externally_provided=[A], overrides={C: D, A: B}.get
         )
         assert plan2 == plan
-        assert plan == [
-            (A, {}),
-            (B, {}),
-            (C, {"a": A, "b": B}),
-            (D, {"a": A, "c": C}),
-        ] or plan == [(B, {}), (A, {}), (C, {"a": A, "b": B}), (D, {"a": A, "c": C})]
+        assert plan in (
+            [(A, {}), (B, {}), (C, {"a": A, "b": B}), (D, {"a": A, "c": C})],
+            [(B, {}), (A, {}), (C, {"a": A, "b": B}), (D, {"a": A, "c": C})],
+        )
 
 
 def test_plan_annotations():
@@ -628,7 +626,7 @@ def get_item_factory(page_cls: Callable) -> Callable:
     return item_factory
 
 
-def get_custom_builders(page_cls: Callable) -> Dict[Callable, Callable]:
+def get_custom_builders(page_cls: Callable) -> dict[Callable, Callable]:
     return {
         Item: get_item_factory(page_cls),
     }
