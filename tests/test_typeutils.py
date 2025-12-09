@@ -48,7 +48,7 @@ def test_get_callable_func_obj_class():
     assert get_callable_func_obj(foo.staticmeth) is foo.staticmeth
 
     with pytest.raises(TypeError):
-        get_callable_func_obj(Foo.x)  # type: ignore
+        get_callable_func_obj(Foo.x)
 
     with pytest.raises(TypeError):
         get_callable_func_obj(foo)

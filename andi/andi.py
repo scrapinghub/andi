@@ -13,7 +13,7 @@ from typing import (
     Tuple,
     Any,
     Mapping,
-    MutableMapping,  # noqa: F401
+    MutableMapping,
 )
 
 from andi.typeutils import (
@@ -368,14 +368,15 @@ def _plan(
 ) -> Tuple[Plan, List[Tuple]]:
     dependency_stack = dependency_stack or []
     is_root_call = not dependency_stack  # For better code reading
-    plan_od = OrderedDict()  # type: MutableMapping[Union[Callable, CustomBuilder], KwargsSpec]
+    plan_od: MutableMapping[Union[Callable, CustomBuilder], KwargsSpec] = OrderedDict()
     type_for_arg = KwargsSpec()
 
     if externally_provided(strip_annotated(class_or_func)):
         return Plan([(class_or_func, KwargsSpec())], full_final_kwargs=True), []
 
+    plan_key: Union[Callable, CustomBuilder]
     if not custom_builder_result:
-        plan_key = class_or_func  # type: Union[Callable, CustomBuilder]
+        plan_key = class_or_func
     else:
         plan_key = CustomBuilder(custom_builder_result, class_or_func)
 
@@ -393,8 +394,8 @@ def _plan(
     arguments = inspect(class_or_func)
     have_default = _params_with_default_value(class_or_func)
 
-    args_errs = defaultdict(list)  # type: Dict[str, List[Tuple]]
-    non_injectable_errs = defaultdict(list)  # type: Dict[str, List[Tuple]]
+    args_errs: Dict[str, List[Tuple]] = defaultdict(list)
+    non_injectable_errs: Dict[str, List[Tuple]] = defaultdict(list)
     for argname, types in arguments.items():
         sel_cls, arg_overrides = _select_type(
             types,
@@ -405,7 +406,7 @@ def _plan(
             custom_builder_fn,
         )
         if sel_cls is not None:
-            errors = []  # type: List[Tuple]
+            errors: List[Tuple] = []
             if sel_cls not in plan_od:
                 run_plan = True
                 custom_builder = custom_builder_fn(sel_cls)
@@ -443,8 +444,9 @@ def _plan(
             else:
                 type_for_arg[argname] = sel_cls
         elif argname not in have_default:
+            err_case: tuple
             if not types:
-                err_case = LackingAnnotationErrCase(argname, class_or_func)  # type: Tuple
+                err_case = LackingAnnotationErrCase(argname, class_or_func)
             else:
                 err_case = NonInjectableOrExternalErrCase(argname, class_or_func, types)
             non_injectable_errs[argname].append(err_case)
