@@ -1,20 +1,20 @@
-from typing import Union, Optional, get_type_hints, Annotated
+from typing import Annotated, Optional, Union, get_type_hints
 
 import pytest
 
 from andi.typeutils import (
-    get_union_args,
     get_callable_func_obj,
     get_type_hints_with_extras,
+    get_union_args,
 )
 
 
 def test_get_union_args():
-    assert get_union_args(Union[str, int]) == [str, int]
+    assert get_union_args(Union[str, int]) == [str, int]  # noqa: UP007
 
 
 def test_get_union_args_optional():
-    assert get_union_args(Optional[Union[str, int]]) == [str, int, None.__class__]
+    assert get_union_args(Optional[Union[str, int]]) == [str, int, None.__class__]  # noqa: UP007,UP045
 
 
 def test_get_callable_func_obj_functions():
@@ -35,7 +35,7 @@ def test_get_callable_func_obj_class():
             pass
 
         @staticmethod
-        def staticmeth(cls):
+        def staticmeth(cls_):
             pass
 
     foo = Foo()

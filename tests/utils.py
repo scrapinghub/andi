@@ -1,13 +1,14 @@
-from typing import Optional, Dict, Any, Callable, List
+from collections.abc import Callable
+from typing import Any
 
 from andi import Step
 from andi.andi import CustomBuilder
 
 
 def build(
-    plan: List[Step],
-    instances_stock: Optional[Dict[Callable, Any]] = None,
-) -> Dict[Callable, Any]:
+    plan: list[Step],
+    instances_stock: dict[Callable, Any] | None = None,
+) -> dict[Callable, Any]:
     """Build instances dictionary from a plan"""
     instances_stock = instances_stock or {}
     instances = {}

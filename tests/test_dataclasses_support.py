@@ -1,6 +1,6 @@
 import andi
 from tests.types import ADCnp, BDCnp
-from tests.types_pep563 import ADC, ADCStrRef, BDC
+from tests.types_pep563 import ADC, BDC, ADCStrRef
 
 
 def test_dataclasses():

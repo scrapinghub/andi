@@ -2,15 +2,15 @@ import pytest
 
 from andi.errors import (
     CyclicDependencyErrCase,
-    NonInjectableOrExternalErrCase,
     LackingAnnotationErrCase,
+    NonInjectableOrExternalErrCase,
+    _argument_lacking_annotation_error,
     _class_or_func_str,
     _cyclic_dependency_error,
-    _argument_lacking_annotation_error,
-    _no_injectable_or_external_error,
     _exception_msg,
+    _no_injectable_or_external_error,
 )
-from tests.test_plan import E, A
+from tests.test_plan import A, E
 
 
 def test_error_messages():
@@ -31,7 +31,7 @@ def test_error_messages():
         str,
     )
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match=r"Unexpected type of error\. This is a bug\."):
         _exception_msg(E, {"arg": ("a", "b")})
 
 

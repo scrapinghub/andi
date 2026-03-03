@@ -1,39 +1,27 @@
 from collections import OrderedDict, defaultdict
+from collections.abc import Callable, Container, Mapping, MutableMapping
 from dataclasses import dataclass
-from inspect import signature, Parameter
-from typing import (
-    Dict,
-    List,
-    Optional,
-    Set,
-    Type,
-    Callable,
-    Union,
-    Container,
-    Tuple,
-    Any,
-    Mapping,
-    MutableMapping,
-)
+from inspect import Parameter, signature
+from typing import Any, TypeAlias
 
-from andi.typeutils import (
-    get_union_args,
-    is_union,
-    get_globalns,
-    get_unannotated_params,
-    get_callable_func_obj,
-    get_type_hints_with_extras,
-    strip_annotated,
-)
 from andi.errors import (
-    NonProvidableError,
     CyclicDependencyErrCase,
     LackingAnnotationErrCase,
     NonInjectableOrExternalErrCase,
+    NonProvidableError,
+)
+from andi.typeutils import (
+    get_callable_func_obj,
+    get_globalns,
+    get_type_hints_with_extras,
+    get_unannotated_params,
+    get_union_args,
+    is_union,
+    strip_annotated,
 )
 
 
-def inspect(class_or_func: Callable) -> Dict[str, List[Optional[Type]]]:
+def inspect(class_or_func: Callable) -> dict[str, list[type | None]]:
     """
     For each argument of the ``class_or_func`` return a list of possible types.
     Non annotated arguments are also returned with an empty list of possible
@@ -65,10 +53,10 @@ def inspect(class_or_func: Callable) -> Dict[str, List[Optional[Type]]]:
     return res
 
 
-def _params_with_default_value(class_or_func: Callable) -> Set[str]:
+def _params_with_default_value(class_or_func: Callable) -> set[str]:
     """Return a set with the names of the parameters of *class_or_func* that
     have a default value."""
-    result: Set[str] = set()
+    result: set[str] = set()
     try:
         sig = signature(class_or_func)
     except ValueError:  # e.g. built-in types.
@@ -79,16 +67,16 @@ def _params_with_default_value(class_or_func: Callable) -> Set[str]:
     return result
 
 
-ContainerOrCallableType = Union[Container[Callable], Callable[[Callable], bool]]
+ContainerOrCallableType: TypeAlias = Container[Callable] | Callable[[Callable], bool]
 
 
-class KwargsSpec(Dict[str, Callable]):
+class KwargsSpec(dict[str, Callable]):
     """
     kwargs specification. Dict with the name of the argument
     and the callable that is required to build an instance for such argument.
     """
 
-    def kwargs(self, instances: Mapping[Callable, Any]) -> Dict[str, Any]:
+    def kwargs(self, instances: Mapping[Callable, Any]) -> dict[str, Any]:
         """
         Build the kwargs dict based on the spec using the prebuilt
         instances provided in the input dictionary.
@@ -100,10 +88,10 @@ class KwargsSpec(Dict[str, Callable]):
         return {name: instances[cls] for name, cls in self.items()}
 
 
-Step = Tuple[Callable, KwargsSpec]
+Step: TypeAlias = tuple[Callable, KwargsSpec]
 
 
-class Plan(List[Step]):
+class Plan(list[Step]):
     """
     The resultant plan of executing the ``plan`` function.
     It contains a sequence of steps that should be executed in order because
@@ -126,7 +114,7 @@ class Plan(List[Step]):
         super().__init__(*args, **kwargs)
 
     @property
-    def dependencies(self) -> List[Step]:
+    def dependencies(self) -> list[Step]:
         """
         The plan required to build the dependencies only for the
         ``plan`` input function/class.
@@ -141,7 +129,7 @@ class Plan(List[Step]):
         """
         return self[:-1]
 
-    def final_kwargs(self, instances: Mapping[Callable, Any]) -> Dict[str, Any]:
+    def final_kwargs(self, instances: Mapping[Callable, Any]) -> dict[str, Any]:
         """
         Build the kwargs dict required to invoke the class/function
         for which the plan was done for.
@@ -154,18 +142,18 @@ class Plan(List[Step]):
         return self[-1][1].kwargs(instances)
 
 
-OverrideFn = Callable[[Callable], Optional[Callable]]
+OverrideFn: TypeAlias = Callable[[Callable], Callable | None]
 
 
 def plan(
     class_or_func: Callable,
     *,
     is_injectable: ContainerOrCallableType,
-    externally_provided: Optional[ContainerOrCallableType] = None,
+    externally_provided: ContainerOrCallableType | None = None,
     full_final_kwargs=False,
-    overrides: Optional[OverrideFn] = None,
+    overrides: OverrideFn | None = None,
     recursive_overrides: bool = False,
-    custom_builder_fn: Callable[[Callable], Optional[Callable]] = lambda _: None,
+    custom_builder_fn: Callable[[Callable], Callable | None] = lambda _: None,
 ) -> Plan:
     """Plan the sequence of instantiation steps required to fulfill the
     the arguments of the given function or the arguments of its
@@ -361,20 +349,20 @@ def _plan(
     externally_provided: Callable[[Callable], bool],
     full_final_kwargs,
     dependency_stack=None,
-    overrides: Callable[[Callable], Optional[Callable]],
+    overrides: Callable[[Callable], Callable | None],
     recursive_overrides: bool = False,
-    custom_builder_fn: Callable[[Callable], Optional[Callable]] = lambda _: None,
-    custom_builder_result: Optional[Callable] = None,
-) -> Tuple[Plan, List[Tuple]]:
+    custom_builder_fn: Callable[[Callable], Callable | None] = lambda _: None,
+    custom_builder_result: Callable | None = None,
+) -> tuple[Plan, list[tuple]]:
     dependency_stack = dependency_stack or []
     is_root_call = not dependency_stack  # For better code reading
-    plan_od: MutableMapping[Union[Callable, CustomBuilder], KwargsSpec] = OrderedDict()
+    plan_od: MutableMapping[Callable | CustomBuilder, KwargsSpec] = OrderedDict()
     type_for_arg = KwargsSpec()
 
     if externally_provided(strip_annotated(class_or_func)):
         return Plan([(class_or_func, KwargsSpec())], full_final_kwargs=True), []
 
-    plan_key: Union[Callable, CustomBuilder]
+    plan_key: Callable | CustomBuilder
     if not custom_builder_result:
         plan_key = class_or_func
     else:
@@ -390,12 +378,12 @@ def _plan(
     if class_or_func in dependency_stack:
         return Plan(), [CyclicDependencyErrCase(class_or_func, dependency_stack)]
 
-    dependency_stack = dependency_stack + [plan_key]
+    dependency_stack = [*dependency_stack, plan_key]
     arguments = inspect(class_or_func)
     have_default = _params_with_default_value(class_or_func)
 
-    args_errs: Dict[str, List[Tuple]] = defaultdict(list)
-    non_injectable_errs: Dict[str, List[Tuple]] = defaultdict(list)
+    args_errs: dict[str, list[tuple]] = defaultdict(list)
+    non_injectable_errs: dict[str, list[tuple]] = defaultdict(list)
     for argname, types in arguments.items():
         sel_cls, arg_overrides = _select_type(
             types,
@@ -406,7 +394,7 @@ def _plan(
             custom_builder_fn,
         )
         if sel_cls is not None:
-            errors: List[Tuple] = []
+            errors: list[tuple] = []
             if sel_cls not in plan_od:
                 run_plan = True
                 custom_builder = custom_builder_fn(sel_cls)
@@ -469,16 +457,16 @@ def _select_type(
     types,
     is_injectable: Callable[[Callable], bool],
     externally_provided: Callable[[Callable], bool],
-    overrides: Callable[[Callable], Optional[Callable]],
+    overrides: Callable[[Callable], Callable | None],
     recursive_overrides: bool,
-    custom_builder_fn: Callable[[Callable], Optional[Callable]] = lambda _: None,
-) -> Tuple[Optional[Callable], OverrideFn]:
+    custom_builder_fn: Callable[[Callable], Callable | None] = lambda _: None,
+) -> tuple[Callable | None, OverrideFn]:
     """
     Choose the first type that can be provided. None otherwise. Also return
     the overrides function to be used from now on.
     """
     for candidate in types:
-        candidate, new_overrides = _may_override(
+        candidate, new_overrides = _may_override(  # noqa: PLW2901
             candidate, overrides, recursive_overrides
         )
         candidate_stripped = strip_annotated(candidate)
@@ -491,13 +479,13 @@ def _select_type(
     return None, overrides
 
 
-def _empty_overrides(class_or_func: Callable) -> Optional[Callable]:
+def _empty_overrides(class_or_func: Callable) -> Callable | None:
     return None
 
 
 def _may_override(
     class_or_func, overrides: OverrideFn, recursive_overrides: bool
-) -> Tuple[Callable, OverrideFn]:
+) -> tuple[Callable, OverrideFn]:
     """
     May override ``class_or_func`` if ``overrides`` function suggest it.
     In such a case, ``overrides`` function is replaced with ``_empty_overrides``
@@ -512,7 +500,7 @@ def _may_override(
 
 
 def _ensure_can_provide_func(
-    cont_or_call: Optional[ContainerOrCallableType],
+    cont_or_call: ContainerOrCallableType | None,
 ) -> Callable[[Callable], bool]:
     if cont_or_call is None:
         return lambda x: False

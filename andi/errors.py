@@ -1,4 +1,5 @@
-from collections import namedtuple
+from collections.abc import Callable
+from typing import NamedTuple
 
 
 class NonProvidableError(TypeError):
@@ -10,42 +11,48 @@ class NonProvidableError(TypeError):
         super().__init__(_exception_msg(class_or_func, errors_per_argument))
 
 
-CyclicDependencyErrCase = namedtuple(
-    "CyclicDependencyErrCase", "class_or_func,dependency_stack"
-)
-NonInjectableOrExternalErrCase = namedtuple(
-    "NonInjectableOrExternalErrCase", "argname,class_or_func,types"
-)
-LackingAnnotationErrCase = namedtuple(
-    "LackingAnnotationErrCase", "argname, class_or_func"
-)
+class CyclicDependencyErrCase(NamedTuple):
+    class_or_func: Callable
+    dependency_stack: list
+
+
+class NonInjectableOrExternalErrCase(NamedTuple):
+    argname: str
+    class_or_func: Callable
+    types: list[type | None]
+
+
+class LackingAnnotationErrCase(NamedTuple):
+    argname: str
+    class_or_func: Callable
 
 
 def _class_or_func_str(class_or_func):
     init_str = ".__init__()" if isinstance(class_or_func, type) else ""
-    return "{}{}".format(class_or_func, init_str)
+    return f"{class_or_func}{init_str}"
 
 
 def _cyclic_dependency_error(class_or_func, dependency_stack):
-    error = "Cyclic dependency found. Dependency graph: {}".format(
-        " -> ".join(map(str, dependency_stack + [class_or_func]))
+    return (
+        f"Cyclic dependency found. Dependency graph: "
+        f"{' -> '.join(map(str, [*dependency_stack, class_or_func]))}"
     )
-    return error
 
 
 def _no_injectable_or_external_error(argname, class_or_func, types):
-    msg = "Any of {} types are required ".format(types)
-    msg += "for argument '{}' ".format(argname)
-    msg += "in '{}' ".format(_class_or_func_str(class_or_func))
-    msg += "but none of them is injectable or externally providable"
-    return msg
+    return (
+        f"Any of {types} types are required "
+        f"for argument '{argname}' "
+        f"in '{_class_or_func_str(class_or_func)}' "
+        f"but none of them is injectable or externally providable"
+    )
 
 
 def _argument_lacking_annotation_error(argname, class_or_func):
-    msg = "Parameter '{}' is lacking annotations in '{}'".format(
-        argname, _class_or_func_str(class_or_func)
+    return (
+        f"Parameter '{argname}' is lacking annotations in "
+        f"'{_class_or_func_str(class_or_func)}'"
     )
-    return msg
 
 
 def _exception_msg(class_or_func, arg_errors):
@@ -54,9 +61,9 @@ def _exception_msg(class_or_func, arg_errors):
         if idx > 0:
             msg += "\n"
         msg += "Not possible to generate a plan for argument "
-        msg += "'{}' in '{}'. ".format(arg, _class_or_func_str(class_or_func))
+        msg += f"'{arg}' in '{_class_or_func_str(class_or_func)}'. "
         msg += "Causes:"
-        for idx, err_case in enumerate(errors):
+        for err_idx, err_case in enumerate(errors):
             if isinstance(err_case, CyclicDependencyErrCase):
                 err_msg = _cyclic_dependency_error(*err_case)
             elif isinstance(err_case, NonInjectableOrExternalErrCase):
@@ -65,5 +72,5 @@ def _exception_msg(class_or_func, arg_errors):
                 err_msg = _argument_lacking_annotation_error(*err_case)
             else:
                 raise Exception("Unexpected type of error. This is a bug.")
-            msg += "\n    {}. {}".format(idx, err_msg)
+            msg += f"\n    {err_idx}. {err_msg}"
     return msg

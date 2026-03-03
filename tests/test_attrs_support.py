@@ -1,5 +1,4 @@
 import andi
-
 from tests.types import A_36, B_36
 from tests.types_pep563 import A_37, B_37
 
