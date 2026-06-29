@@ -13,8 +13,16 @@ def test_get_union_args():
     assert get_union_args(Union[str, int]) == [str, int]  # noqa: UP007
 
 
+def test_get_union_args_pipe():
+    assert get_union_args(str | int) == [str, int]
+
+
 def test_get_union_args_optional():
     assert get_union_args(Optional[Union[str, int]]) == [str, int, None.__class__]  # noqa: UP007,UP045
+
+
+def test_get_union_args_optional_pipe():
+    assert get_union_args(str | int | None) == [str, int, None.__class__]
 
 
 def test_get_callable_func_obj_functions():
