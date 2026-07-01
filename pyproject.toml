@@ -7,7 +7,7 @@ name = "andi"
 version = "0.8.0"
 description = "Library for annotation-based dependency injection"
 readme = "README.rst"
-license = "BSD-3-Clause"
+license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [
     { name = "Mikhail Korobov", email = "kmike84@gmail.com" },
