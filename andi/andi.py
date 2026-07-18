@@ -101,7 +101,8 @@ class CustomBuilder:
     factory: Callable[..., Any]
 
 
-Step: TypeAlias = tuple[Callable[..., Any] | CustomBuilder, KwargsSpec]
+PlanKey: TypeAlias = Callable[..., Any] | CustomBuilder
+Step: TypeAlias = tuple[PlanKey, KwargsSpec]
 
 
 class Plan(list[Step]):
@@ -371,7 +372,7 @@ def _plan(
     is_injectable: Callable[[Any], bool],
     externally_provided: Callable[[Any], bool],
     full_final_kwargs: bool,
-    dependency_stack: list[Callable[..., Any] | CustomBuilder] | None = None,
+    dependency_stack: list[PlanKey] | None = None,
     overrides: OverrideFn,
     recursive_overrides: bool = False,
     custom_builder_fn: CustomBuilderFn = lambda _: None,
@@ -379,15 +380,13 @@ def _plan(
 ) -> tuple[Plan, list[ErrCase]]:
     dependency_stack = dependency_stack or []
     is_root_call = not dependency_stack  # For better code reading
-    plan_od: MutableMapping[Callable[..., Any] | CustomBuilder, KwargsSpec] = (
-        OrderedDict()
-    )
+    plan_od: MutableMapping[PlanKey, KwargsSpec] = OrderedDict()
     type_for_arg = KwargsSpec()
 
     if externally_provided(strip_annotated(class_or_func)):
         return Plan([(class_or_func, KwargsSpec())], full_final_kwargs=True), []
 
-    plan_key: Callable[..., Any] | CustomBuilder
+    plan_key: PlanKey
     if not custom_builder_result:
         plan_key = class_or_func
     else:
