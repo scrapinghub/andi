@@ -25,7 +25,7 @@ where dependencies are expressed using type annotations.
 which helps to implement dependency injection (thus the name -
 ANnotation-based Dependency Injection).
 
-License is BSD 3-clause.
+License is Apache 2.0.
 
 Installation
 ============
