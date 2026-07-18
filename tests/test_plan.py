@@ -206,6 +206,31 @@ def test_plan_with_optionals() -> None:
     ]
 
 
+def test_plan_with_optionals_pipe() -> None:
+    def fn(a: str | None) -> str:
+        assert a is None
+        return "invoked!"
+
+    plan = andi.plan(fn, is_injectable={type(None), str}, externally_provided={str})
+    assert plan == [(str, {}), (fn, {"a": str})]
+    assert plan.full_final_kwargs
+
+    plan = andi.plan(fn, is_injectable={type(None)})
+    assert plan.dependencies == [(type(None), {})]
+    assert _final_kwargs_spec(plan) == {"a": type(None)}
+    assert plan.full_final_kwargs
+
+    instances = build(plan)
+    assert instances[type(None)] is None
+    assert instances[fn] == "invoked!"
+
+    with pytest.raises(andi.NonProvidableError) as ex_info:
+        andi.plan(fn, is_injectable={}, full_final_kwargs=True)
+    assert error_causes(ex_info) == [
+        ("a", [NonInjectableOrExternalErrCase("a", fn, [str, type(None)])])
+    ]
+
+
 def test_plan_with_union() -> None:
     class WithUnion:
         def __init__(self, a_or_b: Union[A, B]):  # noqa: UP007
@@ -242,8 +267,67 @@ def test_plan_with_union() -> None:
     ]
 
 
+def test_plan_with_union_pipe() -> None:
+    class WithUnion:
+        def __init__(self, a_or_b: A | B):
+            pass
+
+    plan = andi.plan(
+        WithUnion, is_injectable={WithUnion, A, B}, externally_provided={A}
+    )
+    assert plan == [(A, {}), (WithUnion, {"a_or_b": A})]
+    assert plan.full_final_kwargs
+
+    plan = andi.plan(WithUnion, is_injectable={WithUnion, B}, externally_provided={A})
+    assert plan == [(A, {}), (WithUnion, {"a_or_b": A})]
+    assert plan.full_final_kwargs
+
+    plan = andi.plan(WithUnion, is_injectable={WithUnion, B})
+    assert plan == [(B, {}), (WithUnion, {"a_or_b": B})]
+    assert plan.full_final_kwargs
+
+    plan = andi.plan(WithUnion, is_injectable={WithUnion}, externally_provided={B})
+    assert plan == [(B, {}), (WithUnion, {"a_or_b": B})]
+    assert plan.full_final_kwargs
+
+    with pytest.raises(andi.NonProvidableError) as ex_info:
+        andi.plan(WithUnion, is_injectable={WithUnion}, full_final_kwargs=True)
+    assert error_causes(ex_info) == [
+        ("a_or_b", [NonInjectableOrExternalErrCase("a_or_b", WithUnion, [A, B])])
+    ]
+
+    with pytest.raises(andi.NonProvidableError) as ex_info:
+        andi.plan(WithUnion, is_injectable={}, full_final_kwargs=True)
+    assert error_causes(ex_info) == [
+        ("a_or_b", [NonInjectableOrExternalErrCase("a_or_b", WithUnion, [A, B])])
+    ]
+
+
 def test_plan_with_optionals_and_union() -> None:
     def fn(str_or_b_or_None: Optional[Union[str, B]]) -> Optional[Union[str, B]]:  # noqa: UP007,UP045
+        return str_or_b_or_None
+
+    plan = andi.plan(fn, is_injectable={str, B, type(None)})
+    assert isinstance(build(plan)[fn], str)
+
+    plan = andi.plan(fn, is_injectable={B, type(None)})
+    assert isinstance(build(plan)[fn], B)
+
+    plan = andi.plan(fn, is_injectable={B, type(None)}, externally_provided={str})
+    assert isinstance(build(plan)[fn], str)
+
+    plan = andi.plan(fn, is_injectable={type(None)})
+    assert build(plan)[fn] is None
+
+    plan = andi.plan(fn, is_injectable={type(None)}, externally_provided={str})
+    assert isinstance(build(plan)[fn], str)
+
+    plan = andi.plan(fn, is_injectable={type(None)}, externally_provided={str, B})
+    assert isinstance(build(plan)[fn], str)
+
+
+def test_plan_with_optionals_and_union_pipe() -> None:
+    def fn(str_or_b_or_None: str | B | None) -> str | B | None:
         return str_or_b_or_None
 
     plan = andi.plan(fn, is_injectable={str, B, type(None)})

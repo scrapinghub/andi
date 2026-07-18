@@ -20,9 +20,11 @@ PlanCallable: TypeAlias = Callable[..., Any]
 
 
 def is_union(tp: Any) -> bool:
-    """Return True if a passed type is a typing.Union.
+    """Return True if a passed type is a typing.Union or a ``X | Y`` union.
 
     >>> is_union(Union[int, str])
+    True
+    >>> is_union(int | str)
     True
     >>> is_union(str)
     False
@@ -31,6 +33,8 @@ def is_union(tp: Any) -> bool:
     >>> is_union(list[str])
     False
     """
+    if isinstance(tp, types.UnionType):
+        return True
     return hasattr(tp, "__origin__") and tp.__origin__ is Union
 
 

@@ -42,6 +42,13 @@ def test_union() -> None:
     assert andi.inspect(func) == {"x": [Foo, Bar]}
 
 
+def test_union_pipe() -> None:
+    def func(x: Foo | Bar) -> None:
+        pass
+
+    assert andi.inspect(func) == {"x": [Foo, Bar]}
+
+
 def test_optional() -> None:
     def func(x: Optional[Foo]) -> None:  # noqa: UP045
         pass
@@ -49,8 +56,22 @@ def test_optional() -> None:
     assert andi.inspect(func) == {"x": [Foo, type(None)]}
 
 
+def test_optional_pipe() -> None:
+    def func(x: Foo | None) -> None:
+        pass
+
+    assert andi.inspect(func) == {"x": [Foo, type(None)]}
+
+
 def test_optional_union() -> None:
     def func(x: Optional[Union[Foo, Baz]]) -> None:  # noqa: UP007, UP045
+        pass
+
+    assert andi.inspect(func) == {"x": [Foo, Baz, type(None)]}
+
+
+def test_optional_union_pipe() -> None:
+    def func(x: Foo | Baz | None) -> None:
         pass
 
     assert andi.inspect(func) == {"x": [Foo, Baz, type(None)]}
