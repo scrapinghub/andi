@@ -1,15 +1,16 @@
 from collections import OrderedDict
 from collections.abc import Callable
 from functools import partial
-from typing import Annotated, Optional, Union
+from typing import Annotated, Any, Optional, Union, cast
 
 import pytest
 
 import andi
 from andi import NonProvidableError
-from andi.andi import CustomBuilder
+from andi.andi import CustomBuilder, KwargsSpec
 from andi.errors import (
     CyclicDependencyErrCase,
+    ErrCase,
     LackingAnnotationErrCase,
     NonInjectableOrExternalErrCase,
 )
@@ -44,19 +45,23 @@ ALL = [A, B, C, D, E]
 SOME = [A, B, C]
 
 
-def _final_kwargs_spec(plan):
+def _final_kwargs_spec(plan: andi.Plan) -> KwargsSpec:
     return plan[-1][1]
 
 
-def error_causes(exec_info):
+def error_causes(
+    exc_info: pytest.ExceptionInfo[NonProvidableError],
+) -> list[tuple[str, list[ErrCase]]]:
     """Return the error causes in a deterministic order"""
-    errors = sorted(exec_info.value.errors_per_argument.items(), key=lambda t: t[0])
-    for _, errs in errors:
-        errs.sort(key=str)
-    return errors
+    result = [
+        (arg, sorted(errs, key=str))
+        for arg, errs in exc_info.value.errors_per_argument.items()
+    ]
+    result.sort(key=lambda t: t[0])
+    return result
 
 
-def test_plan_and_build():
+def test_plan_and_build() -> None:
     plan = andi.plan(E, is_injectable=lambda x: True, externally_provided={A})
     assert plan == [
         (A, {}),
@@ -70,12 +75,12 @@ def test_plan_and_build():
     assert isinstance(instances[E], E)
 
 
-def test_cyclic_dependency():
+def test_cyclic_dependency() -> None:
     plan = andi.plan(
         E, is_injectable=lambda x: True, externally_provided={A}
     )  # No error if externally provided
     assert plan is not None
-    with pytest.raises(andi.NonProvidableError) as exec_info:
+    with pytest.raises(andi.NonProvidableError) as exc_info:
         andi.plan(E, is_injectable=lambda x: True, externally_provided=[])
     expected_errors = [
         ("c", [(CyclicDependencyErrCase(E, [E, C, A]))]),
@@ -87,16 +92,16 @@ def test_cyclic_dependency():
             ],
         ),
     ]
-    assert error_causes(exec_info) == expected_errors
+    assert error_causes(exc_info) == expected_errors
 
-    with pytest.raises(andi.NonProvidableError) as exec_info:
+    with pytest.raises(andi.NonProvidableError) as exc_info:
         andi.plan(
             E,
             is_injectable=lambda x: True,
             externally_provided=[],
             full_final_kwargs=True,
         )
-    assert error_causes(exec_info) == expected_errors
+    assert error_causes(exc_info) == expected_errors
 
 
 @pytest.mark.parametrize(
@@ -107,7 +112,9 @@ def test_cyclic_dependency():
         (E, ALL, ALL),
     ],
 )
-def test_plan_similar_for_class_or_func(cls, is_injectable, externally_provided):
+def test_plan_similar_for_class_or_func(
+    cls: Any, is_injectable: list[Any], externally_provided: list[Any]
+) -> None:
     is_injectable = is_injectable + [cl.__init__ for cl in is_injectable]
     externally_provided = externally_provided + [
         cl.__init__ for cl in externally_provided
@@ -134,7 +141,7 @@ def test_plan_similar_for_class_or_func(cls, is_injectable, externally_provided)
     assert isinstance(instances[cls], cls) or instances[cls] == "external"
 
 
-def test_cannot_be_provided():
+def test_cannot_be_provided() -> None:
     class WithC:
         def __init__(self, c: C):
             pass
@@ -174,8 +181,8 @@ def test_cannot_be_provided():
     ]
 
 
-def test_plan_with_optionals():
-    def fn(a: Optional[str]):  # noqa: UP045
+def test_plan_with_optionals() -> None:
+    def fn(a: Optional[str]) -> str:  # noqa: UP045
         assert a is None
         return "invoked!"
 
@@ -199,7 +206,7 @@ def test_plan_with_optionals():
     ]
 
 
-def test_plan_with_union():
+def test_plan_with_union() -> None:
     class WithUnion:
         def __init__(self, a_or_b: Union[A, B]):  # noqa: UP007
             pass
@@ -235,8 +242,8 @@ def test_plan_with_union():
     ]
 
 
-def test_plan_with_optionals_and_union():
-    def fn(str_or_b_or_None: Optional[Union[str, B]]):  # noqa: UP007,UP045
+def test_plan_with_optionals_and_union() -> None:
+    def fn(str_or_b_or_None: Optional[Union[str, B]]) -> Optional[Union[str, B]]:  # noqa: UP007,UP045
         return str_or_b_or_None
 
     plan = andi.plan(fn, is_injectable={str, B, type(None)})
@@ -278,7 +285,7 @@ def test_plan_with_optionals_and_union():
     ]
 
 
-def test_externally_provided():
+def test_externally_provided() -> None:
     plan = andi.plan(E.__init__, is_injectable=ALL, externally_provided=ALL)
     assert dict(plan.dependencies) == {B: {}, C: {}, D: {}}
     assert _final_kwargs_spec(plan) == {"b": B, "c": C, "d": D}
@@ -316,8 +323,8 @@ def test_externally_provided():
     assert plan.full_final_kwargs
 
 
-def test_plan_for_func():
-    def fn(other: str, e: E, c: C):
+def test_plan_for_func() -> None:
+    def fn(other: str, e: E, c: C) -> None:
         assert other == "yeah!"
         assert isinstance(e, E)
         assert isinstance(c, C)
@@ -340,9 +347,10 @@ def test_plan_for_func():
     ]
 
 
-def test_plan_non_annotated_args():
+def test_plan_non_annotated_args() -> None:
     class WithNonAnnArgs:
-        def __init__(
+        # non_ann* args are left unannotated on purpose
+        def __init__(  # type: ignore[no-untyped-def]
             self, a: A, b: B, non_ann, non_ann_def=0, *, non_ann_kw, non_ann_kw_def=1
         ):
             pass
@@ -380,7 +388,7 @@ def test_plan_non_annotated_args():
     ]
 
 
-def test_plan_non_injectable_args():
+def test_plan_non_injectable_args() -> None:
     class WithNonInjArgs:
         def __init__(
             self,
@@ -441,7 +449,7 @@ def test_plan_non_injectable_args():
     ]
 
 
-def test_plan_nested_non_injectable_args():
+def test_plan_nested_non_injectable_args() -> None:
     class NonInjParent:
         def __init__(self, non_inj_def: int = 0, *, non_inj_kw_def: int = 1):
             self.non_inj_def = non_inj_def
@@ -488,9 +496,9 @@ def test_plan_nested_non_injectable_args():
     ]
 
 
-@pytest.mark.parametrize("full_final_kwargs", [[True], [False]])
-def test_plan_no_args(full_final_kwargs):
-    def fn():
+@pytest.mark.parametrize("full_final_kwargs", [True, False])
+def test_plan_no_args(full_final_kwargs: bool) -> None:
+    def fn() -> bool:
         return True
 
     plan = andi.plan(fn, is_injectable=[], full_final_kwargs=full_final_kwargs)
@@ -501,13 +509,13 @@ def test_plan_no_args(full_final_kwargs):
     assert fn(**plan.final_kwargs(instances))
 
 
-@pytest.mark.parametrize("full_final_kwargs", [[True], [False]])
-def test_plan_use_fn_as_annotations(full_final_kwargs):
-    def fn_ann(b: B):
+@pytest.mark.parametrize("full_final_kwargs", [True, False])
+def test_plan_use_fn_as_annotations(full_final_kwargs: bool) -> None:
+    def fn_ann(b: B) -> B:
         b.modified = True  # type: ignore[attr-defined]
         return b
 
-    def fn(b: fn_ann):
+    def fn(b: fn_ann) -> B:  # type: ignore[valid-type]
         return b
 
     plan = andi.plan(fn, is_injectable=[fn_ann, B], full_final_kwargs=full_final_kwargs)
@@ -516,9 +524,9 @@ def test_plan_use_fn_as_annotations(full_final_kwargs):
     assert instances[fn].modified
 
 
-def test_plan_callable_object():
+def test_plan_callable_object() -> None:
     class MyFunc:
-        def __call__(self, b: B):
+        def __call__(self, b: B) -> None:
             pass
 
     func = MyFunc()
@@ -527,7 +535,7 @@ def test_plan_callable_object():
 
 
 @pytest.mark.parametrize("recursive_overrides", [False, True])
-def test_plan_overrides(recursive_overrides):
+def test_plan_overrides(recursive_overrides: bool) -> None:
     plan_fn = partial(andi.plan, recursive_overrides=recursive_overrides)
     plan = plan_fn(A, is_injectable=ALL, overrides={A: B}.get)
     assert plan == [(B, {})]
@@ -542,10 +550,10 @@ def test_plan_overrides(recursive_overrides):
     )
 
     # Check cycle detection
-    with pytest.raises(NonProvidableError) as exec_info:
+    with pytest.raises(NonProvidableError) as exc_info:
         plan_fn(C, is_injectable=ALL, overrides={A: C}.get)
     expected_errors = [("a", [(CyclicDependencyErrCase(C, [C]))])]
-    assert error_causes(exec_info) == expected_errors
+    assert error_causes(exc_info) == expected_errors
 
     # Check non injectable override
     with pytest.raises(NonProvidableError):
@@ -553,12 +561,12 @@ def test_plan_overrides(recursive_overrides):
 
     if recursive_overrides:
         # Check overriding dont stops in the children of the overridden node
-        with pytest.raises(NonProvidableError) as exec_info:
+        with pytest.raises(NonProvidableError) as exc_info:
             plan = plan_fn(
                 C, is_injectable=ALL, externally_provided=[A], overrides={C: D}.get
             )
         expected_errors = [("c", [(CyclicDependencyErrCase(D, [D]))])]
-        assert error_causes(exec_info) == expected_errors
+        assert error_causes(exc_info) == expected_errors
         plan = plan_fn(
             E, is_injectable=ALL, externally_provided=[A], overrides={D: C, A: B}.get
         )
@@ -578,29 +586,29 @@ def test_plan_overrides(recursive_overrides):
         )
 
 
-def test_plan_annotations():
+def test_plan_annotations() -> None:
     class MyFunc:
-        def __call__(self, b: Annotated[B, 42]):
+        def __call__(self, b: Annotated[B, 42]) -> None:
             pass
 
     func = MyFunc()
     plan = andi.plan(func, is_injectable={B})
-    assert plan == [(Annotated[B, 42], {}), (func, {"b": Annotated[B, 42]})]
+    assert plan == [(Annotated[B, 42], {}), (func, {"b": Annotated[B, 42]})]  # type: ignore[comparison-overlap]
 
 
-def test_plan_annotations_duplicate():
+def test_plan_annotations_duplicate() -> None:
     class MyFunc:
         def __call__(
             self,
             b: Annotated[B, 42],
             b2: Annotated[B, 43],
             b3: Annotated[B, 43],
-        ):
+        ) -> None:
             pass
 
     func = MyFunc()
     plan = andi.plan(func, is_injectable={B})
-    assert plan == [
+    assert plan == [  # type: ignore[comparison-overlap]
         (Annotated[B, 42], {}),
         (Annotated[B, 43], {}),
         (
@@ -615,31 +623,33 @@ def test_plan_annotations_duplicate():
 
 
 class Item:
-    def __init__(self, field: int = 42):
+    def __init__(self, field: int = 42) -> None:
         self.field = field
 
 
-def get_item_factory(page_cls: Callable) -> Callable:
+def get_item_factory(page_cls: Callable[..., Any]) -> Callable[..., Any]:
     def item_factory(page: page_cls) -> Item:  # type: ignore[valid-type]
-        return page.to_item()  # type: ignore[attr-defined]
+        return cast("Item", page.to_item())  # type: ignore[attr-defined]
 
     return item_factory
 
 
-def get_custom_builders(page_cls: Callable) -> dict[Callable, Callable]:
+def get_custom_builders(
+    page_cls: Callable[..., Any],
+) -> dict[Callable[..., Any], Callable[..., Any]]:
     return {
         Item: get_item_factory(page_cls),
     }
 
 
-def test_plan_custom_builder():
+def test_plan_custom_builder() -> None:
     # Item is built from Page
 
     class Page:
         def __init__(self, b: B):
             pass
 
-        def to_item(self):
+        def to_item(self) -> Item:
             return Item()
 
     def fn(item: Item) -> int:
@@ -663,7 +673,7 @@ def test_plan_custom_builder():
     assert instances[fn] == 43
 
 
-def test_plan_custom_builder_modify_item():
+def test_plan_custom_builder_modify_item() -> None:
     # Item is built directly (externally provided)
     # Page is built from that Item
     # The final Item is built from Page
@@ -672,7 +682,7 @@ def test_plan_custom_builder_modify_item():
         def __init__(self, b: B, item: Item):
             self.item = item
 
-        def to_item(self):
+        def to_item(self) -> Item:
             return Item(self.item.field * 2)
 
     def fn(item: Item) -> int:
@@ -697,14 +707,14 @@ def test_plan_custom_builder_modify_item():
     assert instances[fn] == 85
 
 
-def test_plan_custom_builder_not_externally_provided():
+def test_plan_custom_builder_not_externally_provided() -> None:
     # Item needs to be built directly but it's not externally provided
 
     class Page:
         def __init__(self, b: B, item: Item):
             self.item = item
 
-        def to_item(self):
+        def to_item(self) -> Item:
             return Item(self.item.field)
 
     def fn(item: Item) -> int:

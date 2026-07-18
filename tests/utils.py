@@ -7,8 +7,8 @@ from andi.andi import CustomBuilder
 
 def build(
     plan: list[Step],
-    instances_stock: dict[Callable, Any] | None = None,
-) -> dict[Callable, Any]:
+    instances_stock: dict[Callable[..., Any], Any] | None = None,
+) -> dict[Callable[..., Any], Any]:
     """Build instances dictionary from a plan"""
     instances_stock = instances_stock or {}
     instances = {}

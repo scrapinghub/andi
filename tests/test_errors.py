@@ -13,7 +13,7 @@ from andi.errors import (
 from tests.test_plan import A, E
 
 
-def test_error_messages():
+def test_error_messages() -> None:
     cyc = CyclicDependencyErrCase(E, [E, A, E])
     no_inj = NonInjectableOrExternalErrCase("args", E, [A, E])
     lack = LackingAnnotationErrCase("arg", E)
@@ -32,10 +32,10 @@ def test_error_messages():
     )
 
     with pytest.raises(Exception, match=r"Unexpected type of error\. This is a bug\."):
-        _exception_msg(E, {"arg": ("a", "b")})
+        _exception_msg(E, {"arg": ("a", "b")})  # type: ignore[dict-item]
 
 
-def test_class_or_func_str():
+def test_class_or_func_str() -> None:
     assert _class_or_func_str(E) == "<class 'tests.test_plan.E'>.__init__()"
     fn_str = _class_or_func_str(test_class_or_func_str)
     assert fn_str.startswith("<function test_class_or_func_str")
