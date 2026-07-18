@@ -3,7 +3,20 @@ import inspect
 import sys
 import types
 from collections.abc import Callable, Container
-from typing import Annotated, Any, Union, cast, get_args, get_origin, get_type_hints
+from typing import (
+    Annotated,
+    Any,
+    TypeAlias,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
+
+# A callable that andi can inspect the dependencies of and that can be invoked
+# to build a value. This alias is added for clarity.
+PlanCallable: TypeAlias = Callable[..., Any]
 
 
 def is_union(tp: Any) -> bool:
@@ -125,7 +138,7 @@ _FUNCTION_TYPES = (
 )
 
 
-def get_callable_func_obj(class_or_func: Callable[..., Any]) -> Callable[..., Any]:
+def get_callable_func_obj(class_or_func: PlanCallable) -> Callable[..., Any]:
     """
     Return a function/method which will be invoked
     when func(...) is called. The resulting object should be

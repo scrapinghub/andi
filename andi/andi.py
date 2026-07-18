@@ -12,6 +12,7 @@ from andi.errors import (
     NonProvidableError,
 )
 from andi.typeutils import (
+    PlanCallable,
     get_callable_func_obj,
     get_globalns,
     get_type_hints_with_extras,
@@ -22,7 +23,7 @@ from andi.typeutils import (
 )
 
 
-def inspect(class_or_func: Callable[..., Any]) -> dict[str, list[Any]]:
+def inspect(class_or_func: PlanCallable) -> dict[str, list[Any]]:
     """
     For each argument of the ``class_or_func`` return a list of possible types.
     Non annotated arguments are also returned with an empty list of possible
@@ -60,7 +61,7 @@ def inspect(class_or_func: Callable[..., Any]) -> dict[str, list[Any]]:
     return res
 
 
-def _params_with_default_value(class_or_func: Callable[..., Any]) -> set[str]:
+def _params_with_default_value(class_or_func: PlanCallable) -> set[str]:
     """Return a set with the names of the parameters of *class_or_func* that
     have a default value."""
     result: set[str] = set()
@@ -77,13 +78,13 @@ def _params_with_default_value(class_or_func: Callable[..., Any]) -> set[str]:
 ContainerOrCallableType: TypeAlias = Container[Any] | Callable[[Any], bool]
 
 
-class KwargsSpec(dict[str, Callable[..., Any]]):
+class KwargsSpec(dict[str, PlanCallable]):
     """
     kwargs specification. Dict with the name of the argument
     and the callable that is required to build an instance for such argument.
     """
 
-    def kwargs(self, instances: Mapping[Callable[..., Any], Any]) -> dict[str, Any]:
+    def kwargs(self, instances: Mapping[PlanCallable, Any]) -> dict[str, Any]:
         """
         Build the kwargs dict based on the spec using the prebuilt
         instances provided in the input dictionary.
@@ -97,11 +98,11 @@ class KwargsSpec(dict[str, Callable[..., Any]]):
 
 @dataclass(frozen=True)
 class CustomBuilder:
-    result_class_or_fn: Callable[..., Any]
-    factory: Callable[..., Any]
+    result_class_or_fn: PlanCallable
+    factory: PlanCallable
 
 
-PlanKey: TypeAlias = Callable[..., Any] | CustomBuilder
+PlanKey: TypeAlias = PlanCallable | CustomBuilder
 Step: TypeAlias = tuple[PlanKey, KwargsSpec]
 
 
@@ -148,9 +149,7 @@ class Plan(list[Step]):
         """
         return self[:-1]
 
-    def final_kwargs(
-        self, instances: Mapping[Callable[..., Any], Any]
-    ) -> dict[str, Any]:
+    def final_kwargs(self, instances: Mapping[PlanCallable, Any]) -> dict[str, Any]:
         """
         Build the kwargs dict required to invoke the class/function
         for which the plan was done for.
@@ -163,12 +162,12 @@ class Plan(list[Step]):
         return self[-1][1].kwargs(instances)
 
 
-OverrideFn: TypeAlias = Callable[[Any], Callable[..., Any] | None]
-CustomBuilderFn: TypeAlias = Callable[[Any], Callable[..., Any] | None]
+OverrideFn: TypeAlias = Callable[[Any], PlanCallable | None]
+CustomBuilderFn: TypeAlias = Callable[[Any], PlanCallable | None]
 
 
 def plan(
-    class_or_func: Callable[..., Any],
+    class_or_func: PlanCallable,
     *,
     is_injectable: ContainerOrCallableType,
     externally_provided: ContainerOrCallableType | None = None,
@@ -367,7 +366,7 @@ def plan(
 
 
 def _plan(
-    class_or_func: Callable[..., Any],
+    class_or_func: PlanCallable,
     *,
     is_injectable: Callable[[Any], bool],
     externally_provided: Callable[[Any], bool],
@@ -376,7 +375,7 @@ def _plan(
     overrides: OverrideFn,
     recursive_overrides: bool = False,
     custom_builder_fn: CustomBuilderFn = lambda _: None,
-    custom_builder_result: Callable[..., Any] | None = None,
+    custom_builder_result: PlanCallable | None = None,
 ) -> tuple[Plan, list[ErrCase]]:
     dependency_stack = dependency_stack or []
     is_root_call = not dependency_stack  # For better code reading
@@ -484,7 +483,7 @@ def _select_type(
     overrides: OverrideFn,
     recursive_overrides: bool,
     custom_builder_fn: CustomBuilderFn = lambda _: None,
-) -> tuple[Callable[..., Any] | None, OverrideFn]:
+) -> tuple[PlanCallable | None, OverrideFn]:
     """
     Choose the first type that can be provided. None otherwise. Also return
     the overrides function to be used from now on.
@@ -503,13 +502,13 @@ def _select_type(
     return None, overrides
 
 
-def _empty_overrides(class_or_func: Any) -> Callable[..., Any] | None:
+def _empty_overrides(class_or_func: Any) -> PlanCallable | None:
     return None
 
 
 def _may_override(
     class_or_func: Any, overrides: OverrideFn, recursive_overrides: bool
-) -> tuple[Callable[..., Any], OverrideFn]:
+) -> tuple[PlanCallable, OverrideFn]:
     """
     May override ``class_or_func`` if ``overrides`` function suggest it.
     In such a case, ``overrides`` function is replaced with ``_empty_overrides``

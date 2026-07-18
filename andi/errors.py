@@ -1,5 +1,7 @@
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, NamedTuple, TypeAlias
+
+from andi.typeutils import PlanCallable
 
 
 class NonProvidableError(TypeError):
@@ -7,7 +9,7 @@ class NonProvidableError(TypeError):
 
     def __init__(
         self,
-        class_or_func: Callable[..., Any],
+        class_or_func: PlanCallable,
         errors_per_argument: Mapping[str, Sequence["ErrCase"]],
     ) -> None:
         self.class_or_func = class_or_func
@@ -16,19 +18,19 @@ class NonProvidableError(TypeError):
 
 
 class CyclicDependencyErrCase(NamedTuple):
-    class_or_func: Callable[..., Any]
+    class_or_func: PlanCallable
     dependency_stack: list[Any]
 
 
 class NonInjectableOrExternalErrCase(NamedTuple):
     argname: str
-    class_or_func: Callable[..., Any]
+    class_or_func: PlanCallable
     types: list[Any]
 
 
 class LackingAnnotationErrCase(NamedTuple):
     argname: str
-    class_or_func: Callable[..., Any]
+    class_or_func: PlanCallable
 
 
 ErrCase: TypeAlias = (
@@ -36,13 +38,13 @@ ErrCase: TypeAlias = (
 )
 
 
-def _class_or_func_str(class_or_func: Callable[..., Any]) -> str:
+def _class_or_func_str(class_or_func: PlanCallable) -> str:
     init_str = ".__init__()" if isinstance(class_or_func, type) else ""
     return f"{class_or_func}{init_str}"
 
 
 def _cyclic_dependency_error(
-    class_or_func: Callable[..., Any], dependency_stack: list[Any]
+    class_or_func: PlanCallable, dependency_stack: list[Any]
 ) -> str:
     return (
         f"Cyclic dependency found. Dependency graph: "
@@ -51,7 +53,7 @@ def _cyclic_dependency_error(
 
 
 def _no_injectable_or_external_error(
-    argname: str, class_or_func: Callable[..., Any], types: list[Any]
+    argname: str, class_or_func: PlanCallable, types: list[Any]
 ) -> str:
     return (
         f"Any of {types} types are required "
@@ -62,7 +64,7 @@ def _no_injectable_or_external_error(
 
 
 def _argument_lacking_annotation_error(
-    argname: str, class_or_func: Callable[..., Any]
+    argname: str, class_or_func: PlanCallable
 ) -> str:
     return (
         f"Parameter '{argname}' is lacking annotations in "
@@ -71,7 +73,7 @@ def _argument_lacking_annotation_error(
 
 
 def _exception_msg(
-    class_or_func: Callable[..., Any],
+    class_or_func: PlanCallable,
     arg_errors: Mapping[str, Sequence[ErrCase]],
 ) -> str:
     msg = ""
