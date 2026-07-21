@@ -6,11 +6,13 @@ from typing import Any, TypeAlias
 
 from andi.errors import (
     CyclicDependencyErrCase,
+    ErrCase,
     LackingAnnotationErrCase,
     NonInjectableOrExternalErrCase,
     NonProvidableError,
 )
 from andi.typeutils import (
+    PlanCallable,
     get_callable_func_obj,
     get_globalns,
     get_type_hints_with_extras,
@@ -21,7 +23,7 @@ from andi.typeutils import (
 )
 
 
-def inspect(class_or_func: Callable) -> dict[str, list[type | None]]:
+def inspect(class_or_func: PlanCallable) -> dict[str, list[Any]]:
     """
     For each argument of the ``class_or_func`` return a list of possible types.
     Non annotated arguments are also returned with an empty list of possible
@@ -33,6 +35,12 @@ def inspect(class_or_func: Callable) -> dict[str, list[type | None]]:
     * a class - in this case ``cls.__init__`` annotations are returned
     * a callable object - in this case ``obj.__call__`` annotations
       are returned
+
+    The elements of the returned lists are the objects produced by
+    ``typing.get_type_hints(..., include_extras=True)``, with ``Union`` /
+    ``Optional`` annotations flattened into their members. They are therefore
+    not necessarily ``type`` objects: an ``Annotated[X, ...]`` annotation, for
+    example, is kept as-is.
     """
     func = get_callable_func_obj(class_or_func)
     globalns = get_globalns(func)
@@ -42,7 +50,7 @@ def inspect(class_or_func: Callable) -> dict[str, list[type | None]]:
     annotations.pop("return", None)
     annotations.pop("self", None)  # FIXME: pop first argument of methods
     annotations.pop("cls", None)
-    res = {}
+    res: dict[str, list[Any]] = {}
     for key, tp in annotations.items():
         if is_union(tp):
             res[key] = get_union_args(tp)
@@ -53,7 +61,7 @@ def inspect(class_or_func: Callable) -> dict[str, list[type | None]]:
     return res
 
 
-def _params_with_default_value(class_or_func: Callable) -> set[str]:
+def _params_with_default_value(class_or_func: PlanCallable) -> set[str]:
     """Return a set with the names of the parameters of *class_or_func* that
     have a default value."""
     result: set[str] = set()
@@ -67,16 +75,16 @@ def _params_with_default_value(class_or_func: Callable) -> set[str]:
     return result
 
 
-ContainerOrCallableType: TypeAlias = Container[Callable] | Callable[[Callable], bool]
+ContainerOrCallableType: TypeAlias = Container[Any] | Callable[[Any], bool]
 
 
-class KwargsSpec(dict[str, Callable]):
+class KwargsSpec(dict[str, PlanCallable]):
     """
     kwargs specification. Dict with the name of the argument
     and the callable that is required to build an instance for such argument.
     """
 
-    def kwargs(self, instances: Mapping[Callable, Any]) -> dict[str, Any]:
+    def kwargs(self, instances: Mapping[PlanCallable, Any]) -> dict[str, Any]:
         """
         Build the kwargs dict based on the spec using the prebuilt
         instances provided in the input dictionary.
@@ -88,7 +96,14 @@ class KwargsSpec(dict[str, Callable]):
         return {name: instances[cls] for name, cls in self.items()}
 
 
-Step: TypeAlias = tuple[Callable, KwargsSpec]
+@dataclass(frozen=True)
+class CustomBuilder:
+    result_class_or_fn: PlanCallable
+    factory: PlanCallable
+
+
+PlanKey: TypeAlias = PlanCallable | CustomBuilder
+Step: TypeAlias = tuple[PlanKey, KwargsSpec]
 
 
 class Plan(list[Step]):
@@ -98,10 +113,15 @@ class Plan(list[Step]):
     they are dependant among them.
 
     The plan is itself a list of tuples of type
-    ``Tuple[Callable, KwargsSpec]``. Note that
-    ``KwargsSpec`` is almost a ``Dict[str, Callable]``
+    ``tuple[Callable | CustomBuilder, KwargsSpec]``. Note that
+    ``KwargsSpec`` is almost a ``dict[str, Callable]``
     so each step in the plan corresponds to
-    (callable_to_invoke, (argument_name -> callable_to_build_the_argument)).
+    (callable_or_custom_builder, (argument_name -> callable_to_build_the_argument)).
+
+    The first element of a step is usually the class/function to invoke, but it
+    can also be a :class:`CustomBuilder` when the step is built through a
+    ``custom_builder_fn`` (see ``plan``). Consumers iterating over the plan must
+    handle that case, e.g. with ``isinstance(fn_or_cls, CustomBuilder)``.
 
     ``plan.full_final_kwargs`` is ``True`` if ``final_kwargs`` function
     returns a ``kwargs`` dict containing absolutely all arguments required
@@ -109,7 +129,7 @@ class Plan(list[Step]):
     incomplete set of ``kwargs``.
     """
 
-    def __init__(self, *args, full_final_kwargs: bool = False, **kwargs):
+    def __init__(self, *args: Any, full_final_kwargs: bool = False, **kwargs: Any):
         self.full_final_kwargs = full_final_kwargs
         super().__init__(*args, **kwargs)
 
@@ -129,7 +149,7 @@ class Plan(list[Step]):
         """
         return self[:-1]
 
-    def final_kwargs(self, instances: Mapping[Callable, Any]) -> dict[str, Any]:
+    def final_kwargs(self, instances: Mapping[PlanCallable, Any]) -> dict[str, Any]:
         """
         Build the kwargs dict required to invoke the class/function
         for which the plan was done for.
@@ -142,18 +162,19 @@ class Plan(list[Step]):
         return self[-1][1].kwargs(instances)
 
 
-OverrideFn: TypeAlias = Callable[[Callable], Callable | None]
+OverrideFn: TypeAlias = Callable[[Any], PlanCallable | None]
+CustomBuilderFn: TypeAlias = Callable[[Any], PlanCallable | None]
 
 
 def plan(
-    class_or_func: Callable,
+    class_or_func: PlanCallable,
     *,
     is_injectable: ContainerOrCallableType,
     externally_provided: ContainerOrCallableType | None = None,
-    full_final_kwargs=False,
+    full_final_kwargs: bool = False,
     overrides: OverrideFn | None = None,
     recursive_overrides: bool = False,
-    custom_builder_fn: Callable[[Callable], Callable | None] = lambda _: None,
+    custom_builder_fn: CustomBuilderFn = lambda _: None,
 ) -> Plan:
     """Plan the sequence of instantiation steps required to fulfill the
     the arguments of the given function or the arguments of its
@@ -164,8 +185,9 @@ def plan(
     The plan is a sequence of steps.
     Each step in the plan is a tuple with:
 
-    * A callable with the
-      class/function that must be built/invoked in this step
+    * A callable with the class/function that must be built/invoked in this
+      step, or a :class:`CustomBuilder` when ``custom_builder_fn`` provides a
+      factory for that step.
     * A ``KwargsSpec`` with all the kwargs required for the
       build/invocation process. This is a dictionary-like object with
       the argument names as keys
@@ -180,7 +202,10 @@ def plan(
                 kwargs = {arg: instances[arg_builder]
                           for arg, arg_builder in kwargs_spec.items()}
                 # or alternatively: kwargs = kwargs_spec.kwargs(instances)
-                instances[fn_or_cls] = fn_or_cls(**kwargs)
+                if isinstance(fn_or_cls, CustomBuilder):
+                    instances[fn_or_cls.result_class_or_fn] = fn_or_cls.factory(**kwargs)
+                else:
+                    instances[fn_or_cls] = fn_or_cls(**kwargs)
             return instances
 
     Note that the generated instances dictionary would contain not only the
@@ -237,7 +262,11 @@ def plan(
     >>> def build(plan):  # Build all the instances from a plan
     ...     instances = {}
     ...     for fn_or_cls, kwargs_spec in plan:
-    ...         instances[fn_or_cls] = fn_or_cls(**kwargs_spec.kwargs(instances))
+    ...         kwargs = kwargs_spec.kwargs(instances)
+    ...         if isinstance(fn_or_cls, CustomBuilder):
+    ...             instances[fn_or_cls.result_class_or_fn] = fn_or_cls.factory(**kwargs)
+    ...         else:
+    ...             instances[fn_or_cls] = fn_or_cls(**kwargs)
     ...     return instances
     ...
     >>> plan_steps = plan(fn, is_injectable={A, B})
@@ -336,33 +365,27 @@ def plan(
     return plan
 
 
-@dataclass(frozen=True)
-class CustomBuilder:
-    result_class_or_fn: Callable
-    factory: Callable
-
-
 def _plan(
-    class_or_func: Callable,
+    class_or_func: PlanCallable,
     *,
-    is_injectable: Callable[[Callable], bool],
-    externally_provided: Callable[[Callable], bool],
-    full_final_kwargs,
-    dependency_stack=None,
-    overrides: Callable[[Callable], Callable | None],
+    is_injectable: Callable[[Any], bool],
+    externally_provided: Callable[[Any], bool],
+    full_final_kwargs: bool,
+    dependency_stack: list[PlanKey] | None = None,
+    overrides: OverrideFn,
     recursive_overrides: bool = False,
-    custom_builder_fn: Callable[[Callable], Callable | None] = lambda _: None,
-    custom_builder_result: Callable | None = None,
-) -> tuple[Plan, list[tuple]]:
+    custom_builder_fn: CustomBuilderFn = lambda _: None,
+    custom_builder_result: PlanCallable | None = None,
+) -> tuple[Plan, list[ErrCase]]:
     dependency_stack = dependency_stack or []
     is_root_call = not dependency_stack  # For better code reading
-    plan_od: MutableMapping[Callable | CustomBuilder, KwargsSpec] = OrderedDict()
+    plan_od: MutableMapping[PlanKey, KwargsSpec] = OrderedDict()
     type_for_arg = KwargsSpec()
 
     if externally_provided(strip_annotated(class_or_func)):
         return Plan([(class_or_func, KwargsSpec())], full_final_kwargs=True), []
 
-    plan_key: Callable | CustomBuilder
+    plan_key: PlanKey
     if not custom_builder_result:
         plan_key = class_or_func
     else:
@@ -382,8 +405,8 @@ def _plan(
     arguments = inspect(class_or_func)
     have_default = _params_with_default_value(class_or_func)
 
-    args_errs: dict[str, list[tuple]] = defaultdict(list)
-    non_injectable_errs: dict[str, list[tuple]] = defaultdict(list)
+    args_errs: dict[str, list[ErrCase]] = defaultdict(list)
+    non_injectable_errs: dict[str, list[ErrCase]] = defaultdict(list)
     for argname, types in arguments.items():
         sel_cls, arg_overrides = _select_type(
             types,
@@ -394,7 +417,7 @@ def _plan(
             custom_builder_fn,
         )
         if sel_cls is not None:
-            errors: list[tuple] = []
+            errors: list[ErrCase] = []
             if sel_cls not in plan_od:
                 run_plan = True
                 custom_builder = custom_builder_fn(sel_cls)
@@ -432,7 +455,7 @@ def _plan(
             else:
                 type_for_arg[argname] = sel_cls
         elif argname not in have_default:
-            err_case: tuple
+            err_case: ErrCase
             if not types:
                 err_case = LackingAnnotationErrCase(argname, class_or_func)
             else:
@@ -454,13 +477,13 @@ def _plan(
 
 
 def _select_type(
-    types,
-    is_injectable: Callable[[Callable], bool],
-    externally_provided: Callable[[Callable], bool],
-    overrides: Callable[[Callable], Callable | None],
+    types: list[Any],
+    is_injectable: Callable[[Any], bool],
+    externally_provided: Callable[[Any], bool],
+    overrides: OverrideFn,
     recursive_overrides: bool,
-    custom_builder_fn: Callable[[Callable], Callable | None] = lambda _: None,
-) -> tuple[Callable | None, OverrideFn]:
+    custom_builder_fn: CustomBuilderFn = lambda _: None,
+) -> tuple[PlanCallable | None, OverrideFn]:
     """
     Choose the first type that can be provided. None otherwise. Also return
     the overrides function to be used from now on.
@@ -479,13 +502,13 @@ def _select_type(
     return None, overrides
 
 
-def _empty_overrides(class_or_func: Callable) -> Callable | None:
+def _empty_overrides(class_or_func: Any) -> PlanCallable | None:
     return None
 
 
 def _may_override(
-    class_or_func, overrides: OverrideFn, recursive_overrides: bool
-) -> tuple[Callable, OverrideFn]:
+    class_or_func: Any, overrides: OverrideFn, recursive_overrides: bool
+) -> tuple[PlanCallable, OverrideFn]:
     """
     May override ``class_or_func`` if ``overrides`` function suggest it.
     In such a case, ``overrides`` function is replaced with ``_empty_overrides``
@@ -501,7 +524,7 @@ def _may_override(
 
 def _ensure_can_provide_func(
     cont_or_call: ContainerOrCallableType | None,
-) -> Callable[[Callable], bool]:
+) -> Callable[[Any], bool]:
     if cont_or_call is None:
         return lambda x: False
     if isinstance(cont_or_call, Container):

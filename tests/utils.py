@@ -1,20 +1,20 @@
-from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from andi import Step
-from andi.andi import CustomBuilder
+from andi.andi import CustomBuilder, PlanKey
+from andi.typeutils import PlanCallable
 
 
 def build(
     plan: list[Step],
-    instances_stock: dict[Callable, Any] | None = None,
-) -> dict[Callable, Any]:
+    instances_stock: dict[PlanKey, Any] | None = None,
+) -> dict[PlanCallable, Any]:
     """Build instances dictionary from a plan"""
     instances_stock = instances_stock or {}
-    instances = {}
+    instances: dict[PlanCallable, Any] = {}
     for cls, kwargs_spec in plan:
         if cls in instances_stock:
-            instances[cls] = instances_stock[cls]
+            instances[cast("PlanCallable", cls)] = instances_stock[cls]
         elif isinstance(cls, CustomBuilder):
             instances[cls.result_class_or_fn] = cls.factory(
                 **kwargs_spec.kwargs(instances)

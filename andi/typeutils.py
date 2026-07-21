@@ -3,10 +3,23 @@ import inspect
 import sys
 import types
 from collections.abc import Callable, Container
-from typing import Annotated, Union, get_args, get_origin, get_type_hints
+from typing import (
+    Annotated,
+    Any,
+    TypeAlias,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
+
+# A callable that andi can inspect the dependencies of and that can be invoked
+# to build a value. This alias is added for clarity.
+PlanCallable: TypeAlias = Callable[..., Any]
 
 
-def is_union(tp) -> bool:
+def is_union(tp: Any) -> bool:
     """Return True if a passed type is a typing.Union or a ``X | Y`` union.
 
     >>> is_union(Union[int, str])
@@ -25,7 +38,7 @@ def is_union(tp) -> bool:
     return hasattr(tp, "__origin__") and tp.__origin__ is Union
 
 
-def get_type_hints_with_extras(obj, *args, **kwargs):
+def get_type_hints_with_extras(obj: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
     """
     Like get_type_hints, but sets include_extras=True
     """
@@ -33,12 +46,12 @@ def get_type_hints_with_extras(obj, *args, **kwargs):
     return get_type_hints(obj, *args, **kwargs)
 
 
-def get_union_args(tp) -> list:
+def get_union_args(tp: Any) -> list[Any]:
     """Return a list of typing.Union args."""
     return list(tp.__args__)
 
 
-def issubclass_safe(cls, bases) -> bool:
+def issubclass_safe(cls: Any, bases: Any) -> bool:
     """like issubclass, but return False if cls is not a class, instead of
     raising an error:
 
@@ -55,7 +68,9 @@ def issubclass_safe(cls, bases) -> bool:
         return False
 
 
-def get_unannotated_params(func, annotations: Container) -> list[str]:
+def get_unannotated_params(
+    func: Callable[..., Any], annotations: Container[str]
+) -> list[str]:
     """Return a list of ``func`` argument names which are not type annotated.
 
     ``annotations`` should be a result of get_type_hints call for ``func``.
@@ -78,7 +93,7 @@ def get_unannotated_params(func, annotations: Container) -> list[str]:
     return res
 
 
-def get_globalns(func: Callable) -> dict:
+def get_globalns(func: Callable[..., Any]) -> dict[str, Any]:
     """Return the global namespace that will be used for the resolution
     of postponed type annotations.
 
@@ -90,7 +105,7 @@ def get_globalns(func: Callable) -> dict:
     return ns
 
 
-def _get_globalns_as_get_type_hints(func: Callable) -> dict:
+def _get_globalns_as_get_type_hints(func: Callable[..., Any]) -> dict[str, Any]:
     """Global namespace resolution extracted from ``get_type_hints`` method.
     Python 3.7 (https://github.com/python/cpython/blob/3.7/Lib/typing.py#L981-L988)
     Note that this is only supporting functions as input."""
@@ -101,7 +116,7 @@ def _get_globalns_as_get_type_hints(func: Callable) -> dict:
     return getattr(nsobj, "__globals__", {})
 
 
-def _get_globalns_for_attrs(func: Callable) -> dict:
+def _get_globalns_for_attrs(func: Callable[..., Any]) -> dict[str, Any]:
     """Adds partial support for postponed type annotations in attrs classes.
     Also required to support attrs classes when
     ``from __future__ import annotations`` is used (default for python 4.0).
@@ -127,7 +142,7 @@ _FUNCTION_TYPES = (
 )
 
 
-def get_callable_func_obj(class_or_func: Callable) -> Callable:
+def get_callable_func_obj(class_or_func: PlanCallable) -> Callable[..., Any]:
     """
     Return a function/method which will be invoked
     when func(...) is called. The resulting object should be
@@ -137,7 +152,7 @@ def get_callable_func_obj(class_or_func: Callable) -> Callable:
         raise TypeError(f"{class_or_func!r} is not callable")
     if isinstance(class_or_func, type):
         # see https://github.com/python/typing/discussions/1331
-        return class_or_func.__init__  # type: ignore[misc]
+        return cast("Callable[..., Any]", class_or_func.__init__)  # type: ignore[misc]
     # we need to check some exact types, because some function-like
     # object also have __call__ method, while it is better
     # not to use it, as get_type_hints support these objects as-is
@@ -148,17 +163,17 @@ def get_callable_func_obj(class_or_func: Callable) -> Callable:
             f"functools.partial support is not implemented; {class_or_func!r} is passed"
         )
     if hasattr(class_or_func, "__call__"):  # noqa: B004
-        return class_or_func.__call__
+        return cast("Callable[..., Any]", class_or_func.__call__)
     # not sure how to trigger it
     raise TypeError(f"Unexpected callable object {class_or_func!r}")
 
 
-def is_typing_annotated(o: Callable) -> bool:
+def is_typing_annotated(o: Any) -> bool:
     """Return True if the input is typing.Annotated"""
-    return get_origin(o) == Annotated
+    return get_origin(o) is Annotated
 
 
-def strip_annotated(o: Callable) -> Callable:
+def strip_annotated(o: Any) -> Any:
     """Return the underlying type for Annotated, the input itself otherwise."""
     if is_typing_annotated(o):
         return get_args(o)[0]
