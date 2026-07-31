@@ -1,7 +1,7 @@
 from collections import OrderedDict, defaultdict
 from collections.abc import Callable, Container, Mapping, MutableMapping
 from dataclasses import dataclass
-from inspect import Parameter, signature
+from inspect import Parameter
 from typing import Any, TypeAlias
 
 from andi.errors import (
@@ -10,9 +10,11 @@ from andi.errors import (
     LackingAnnotationErrCase,
     NonInjectableOrExternalErrCase,
     NonProvidableError,
+    _class_or_func_str,
 )
 from andi.typeutils import (
     PlanCallable,
+    _signature,
     get_callable_func_obj,
     get_globalns,
     get_type_hints_with_extras,
@@ -44,7 +46,16 @@ def inspect(class_or_func: PlanCallable) -> dict[str, list[Any]]:
     """
     func = get_callable_func_obj(class_or_func)
     globalns = get_globalns(func)
-    annotations = get_type_hints_with_extras(func, globalns)
+    try:
+        annotations = get_type_hints_with_extras(func, globalns)
+    except NameError as exception:
+        # Postponed annotations are evaluated here rather than where they are
+        # written, so the traceback alone does not tell which signature is at
+        # fault.
+        raise NameError(
+            f"Could not resolve the type annotations of "
+            f"{_class_or_func_str(class_or_func)}: {exception}"
+        ) from exception
     for name in get_unannotated_params(func, annotations):
         annotations[name] = None
     annotations.pop("return", None)
@@ -66,7 +77,7 @@ def _params_with_default_value(class_or_func: PlanCallable) -> set[str]:
     have a default value."""
     result: set[str] = set()
     try:
-        sig = signature(class_or_func)
+        sig = _signature(class_or_func)
     except ValueError:  # e.g. built-in types.
         return result
     for name, metadata in sig.parameters.items():
