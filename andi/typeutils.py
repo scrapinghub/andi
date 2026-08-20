@@ -159,13 +159,23 @@ def get_callable_func_obj(class_or_func: PlanCallable) -> Callable[..., Any]:
     if isinstance(class_or_func, _FUNCTION_TYPES):
         return class_or_func
     if isinstance(class_or_func, functools.partial):
-        raise NotImplementedError(
-            f"functools.partial support is not implemented; {class_or_func!r} is passed"
-        )
+        return get_callable_func_obj(class_or_func.func)
     if hasattr(class_or_func, "__call__"):  # noqa: B004
         return cast("Callable[..., Any]", class_or_func.__call__)
     # not sure how to trigger it
     raise TypeError(f"Unexpected callable object {class_or_func!r}")
+
+
+def get_partial_bound_args(class_or_func: Any) -> set[str]:
+    """Return the names of the parameters already filled in by
+    ``functools.partial``, following nested partials."""
+    names: set[str] = set()
+    while isinstance(class_or_func, functools.partial):
+        params = list(inspect.signature(class_or_func.func).parameters)
+        names.update(params[: len(class_or_func.args)])
+        names.update(class_or_func.keywords)
+        class_or_func = class_or_func.func
+    return names
 
 
 def is_typing_annotated(o: Any) -> bool:

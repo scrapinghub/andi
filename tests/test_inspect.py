@@ -142,12 +142,30 @@ def test_decorated() -> None:
     assert andi.inspect(func) == {"x": [Bar]}
 
 
-@pytest.mark.xfail(reason="functools.partial support is not implemented")
 def test_partial() -> None:
     def func(x: Foo, y: Bar) -> None:
         pass
 
     func_nofoo = partial(func, x=Foo())
+    assert andi.inspect(func_nofoo) == {"y": [Bar]}
+
+    func_nobar = partial(func, Foo())
+    assert andi.inspect(func_nobar) == {"y": [Bar]}
+
+    func_none_left = partial(func, Foo(), y=Bar())
+    assert andi.inspect(func_none_left) == {}
+
+    func_double_partial = partial(partial(func, x=Foo()), y=Bar())
+    assert andi.inspect(func_double_partial) == {}
+
+
+def test_partial_of_bound_method() -> None:
+    class MyClass:
+        def method(self, x: Foo, y: Bar) -> None:
+            pass
+
+    obj = MyClass()
+    func_nofoo = partial(obj.method, x=Foo())
     assert andi.inspect(func_nofoo) == {"y": [Bar]}
 
 
