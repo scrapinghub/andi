@@ -91,6 +91,8 @@ def _exception_msg(
             elif isinstance(err_case, LackingAnnotationErrCase):
                 err_msg = _argument_lacking_annotation_error(*err_case)
             else:
-                raise Exception("Unexpected type of error. This is a bug.")
+                raise AssertionError(  # noqa: TRY004
+                    "Unexpected type of error. This is a bug."
+                )
             msg += f"\n    {err_idx}. {err_msg}"
     return msg
