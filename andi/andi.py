@@ -414,7 +414,7 @@ def _plan(
             externally_provided,
             overrides,
             recursive_overrides,
-            custom_builder_fn,
+            custom_builder_fn=custom_builder_fn,
         )
         if sel_cls is not None:
             errors: list[ErrCase] = []
@@ -482,6 +482,7 @@ def _select_type(
     externally_provided: Callable[[Any], bool],
     overrides: OverrideFn,
     recursive_overrides: bool,
+    *,
     custom_builder_fn: CustomBuilderFn = lambda _: None,
 ) -> tuple[PlanCallable | None, OverrideFn]:
     """
