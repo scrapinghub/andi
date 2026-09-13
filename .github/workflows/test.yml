@@ -1,7 +1,7 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
-# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+name: tests
 
-name: tox
+permissions:
+  contents: read
 
 on:
   push:
@@ -13,15 +13,20 @@ jobs:
   test:
 
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # OIDC authentication with Codecov
     strategy:
       fail-fast: false
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14', '3.15']
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
       with:
         python-version: ${{ matrix.python-version }}
         allow-prereleases: true
@@ -32,10 +37,16 @@ jobs:
     - name: tox
       run: |
         tox -e py
-    - name: coverage
-      uses: codecov/codecov-action@v5
+    - name: Upload coverage report
+      uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
       with:
-        token: ${{ secrets.CODECOV_TOKEN }}
+        use_oidc: true
+    - name: Upload test results
+      if: ${{ !cancelled() }}
+      uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+      with:
+        report_type: test_results
+        use_oidc: true
 
   check:
     runs-on: ubuntu-latest
@@ -46,9 +57,11 @@ jobs:
         tox-job: ["mypy", "twinecheck"]
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
@@ -62,5 +75,7 @@ jobs:
   pre-commit:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
-    - uses: pre-commit/action@v3.0.1
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
