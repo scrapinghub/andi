@@ -15,6 +15,7 @@ from andi.typeutils import (
     PlanCallable,
     get_callable_func_obj,
     get_globalns,
+    get_partial_bound_args,
     get_type_hints_with_extras,
     get_unannotated_params,
     get_union_args,
@@ -35,6 +36,8 @@ def inspect(class_or_func: PlanCallable) -> dict[str, list[Any]]:
     * a class - in this case ``cls.__init__`` annotations are returned
     * a callable object - in this case ``obj.__call__`` annotations
       are returned
+    * a ``functools.partial`` wrapping any of the above - in this case
+      the arguments already bound by the partial are excluded
 
     The elements of the returned lists are the objects produced by
     ``typing.get_type_hints(..., include_extras=True)``, with ``Union`` /
@@ -50,6 +53,8 @@ def inspect(class_or_func: PlanCallable) -> dict[str, list[Any]]:
     annotations.pop("return", None)
     annotations.pop("self", None)  # FIXME: pop first argument of methods
     annotations.pop("cls", None)
+    for name in get_partial_bound_args(class_or_func):
+        annotations.pop(name, None)
     res: dict[str, list[Any]] = {}
     for key, tp in annotations.items():
         if is_union(tp):
