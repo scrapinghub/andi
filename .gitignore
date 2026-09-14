@@ -18,6 +18,7 @@
 .pytest_cache/
 .coverage
 coverage.xml
+*.junit.xml
 htmlcov/
 .env/
 .venv/

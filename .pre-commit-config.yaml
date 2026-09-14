@@ -1,6 +1,6 @@
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.16.4
+  rev: v0.16.7
   hooks:
     - id: ruff-check
       args: [ --fix ]
@@ -10,3 +10,12 @@ repos:
   hooks:
   - id: end-of-file-fixer
   - id: trailing-whitespace
+- repo: https://github.com/rhysd/actionlint
+  rev: v1.7.12
+  hooks:
+    - id: actionlint
+- repo: https://github.com/zizmorcore/zizmor-pre-commit
+  rev: v1.30.1
+  hooks:
+    - id: zizmor
+      args: [--no-progress, --fix]
