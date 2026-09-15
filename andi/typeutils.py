@@ -46,6 +46,21 @@ def get_type_hints_with_extras(obj: Any, *args: Any, **kwargs: Any) -> dict[str,
     return get_type_hints(obj, *args, **kwargs)
 
 
+if sys.version_info >= (3, 14):
+    from annotationlib import Format
+
+    def _signature(obj: Callable[..., Any]) -> inspect.Signature:
+        # Only parameter kinds and default values are read from the returned
+        # signature. A best-effort annotation format is requested so that
+        # annotations that cannot be resolved at run time do not raise.
+        return inspect.signature(obj, annotation_format=Format.FORWARDREF)
+
+else:
+
+    def _signature(obj: Callable[..., Any]) -> inspect.Signature:
+        return inspect.signature(obj)
+
+
 def get_union_args(tp: Any) -> list[Any]:
     """Return a list of typing.Union args."""
     return list(tp.__args__)
@@ -86,7 +101,7 @@ def get_unannotated_params(
         inspect.Parameter.VAR_KEYWORD,  # **kwargs argument
     }
     res = []
-    for name, param in inspect.signature(func).parameters.items():
+    for name, param in _signature(func).parameters.items():
         if name in annotations or param.kind in ARGS_KWARGS:
             continue
         res.append(name)

@@ -1,3 +1,4 @@
+import sys
 from collections import OrderedDict
 from collections.abc import Callable
 from functools import partial
@@ -7,7 +8,7 @@ import pytest
 
 import andi
 from andi import NonProvidableError
-from andi.andi import CustomBuilder, KwargsSpec
+from andi.andi import CustomBuilder, KwargsSpec, _params_with_default_value
 from andi.errors import (
     CyclicDependencyErrCase,
     ErrCase,
@@ -815,3 +816,14 @@ def test_plan_custom_builder_not_externally_provided() -> None:
     assert error_causes(exc_info) == [
         ("item", [NonInjectableOrExternalErrCase("item", Page, [Item])])
     ]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 14),
+    reason="Annotations are evaluated when the signature is defined",
+)
+def test_params_with_default_value_unresolvable_annotation() -> None:
+    def f(a: A, b: Unresolvable = None) -> None:  # type: ignore[name-defined] # noqa: F821
+        pass
+
+    assert _params_with_default_value(f) == {"b"}

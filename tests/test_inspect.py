@@ -1,3 +1,4 @@
+import sys
 from collections.abc import Callable
 from functools import partial, wraps
 from typing import Annotated, Any, Optional, TypeVar, Union
@@ -5,6 +6,7 @@ from typing import Annotated, Any, Optional, TypeVar, Union
 import pytest
 
 import andi
+from tests.types_pep563 import fn_unresolvable_annotation
 
 
 class Foo:
@@ -105,6 +107,23 @@ def test_string_types_with_fn() -> None:
 
     with pytest.raises(NameError):
         andi.inspect(Fuu.__init__)
+
+
+def test_unresolvable_annotation_names_the_callable() -> None:
+    with pytest.raises(NameError, match="fn_unresolvable_annotation"):
+        andi.inspect(fn_unresolvable_annotation)
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 14),
+    reason="Annotations are evaluated when the signature is defined",
+)
+def test_unresolvable_lazy_annotation_names_the_callable() -> None:
+    def func(a: Unresolvable) -> None:  # type: ignore[name-defined] # noqa: F821
+        pass
+
+    with pytest.raises(NameError, match="func"):
+        andi.inspect(func)
 
 
 def test_init_methods() -> None:
