@@ -4,7 +4,7 @@ Changes
 0.9.0 (unreleased)
 ------------------
 
-* Switched the license from MIT to Apache 2.0.
+* Switched the license from BSD-3 to Apache 2.0.
 * Added support for Python 3.15.
 * Dropped support for Python 3.9.
 * Added support for ``functools.partial()`` callables.
