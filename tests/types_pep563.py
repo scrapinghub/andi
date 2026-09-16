@@ -28,3 +28,7 @@ class ADCStrRef:
 @dataclass
 class BDC:
     a: ADC
+
+
+def fn_unresolvable_annotation(a: Unresolvable) -> None:  # type: ignore[name-defined] # noqa: F821
+    pass

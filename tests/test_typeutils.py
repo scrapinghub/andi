@@ -1,3 +1,4 @@
+import sys
 from typing import Annotated, Any, Optional, Union, get_type_hints
 
 import pytest
@@ -5,6 +6,7 @@ import pytest
 from andi.typeutils import (
     get_callable_func_obj,
     get_type_hints_with_extras,
+    get_unannotated_params,
     get_union_args,
 )
 
@@ -101,3 +103,14 @@ def test_get_hint_extras() -> None:
 
     hints_annotated = get_type_hints_with_extras(f)
     assert hints_annotated["x"] == Annotated[int, 42]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 14),
+    reason="Annotations are evaluated when the signature is defined",
+)
+def test_get_unannotated_params_unresolvable_annotation() -> None:
+    def f(x, y: Unresolvable) -> None:  # type: ignore[no-untyped-def,name-defined] # noqa: F821
+        pass
+
+    assert get_unannotated_params(f, {"y"}) == ["x"]
