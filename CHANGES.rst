@@ -1,6 +1,18 @@
 Changes
 =======
 
+0.9.0 (unreleased)
+------------------
+
+* Switched the license from MIT to Apache 2.0.
+* Added support for Python 3.15.
+* Dropped support for Python 3.9.
+* Added support for ``functools.partial()`` callables.
+* Improved support for ``X | Y`` annotations.
+* Improved support for unesolvable annotations.
+* Type hint improvements.
+* Linting and CI improvements.
+
 0.8.0 (2025-10-03)
 ------------------
 
