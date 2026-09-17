@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "andi"
-version = "0.8.0"
+version = "0.9.0"
 description = "Library for annotation-based dependency injection"
 readme = "README.rst"
 license = "Apache-2.0"

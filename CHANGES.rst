@@ -1,7 +1,7 @@
 Changes
 =======
 
-0.9.0 (unreleased)
+0.9.0 (2026-09-17)
 ------------------
 
 * Switched the license from BSD-3 to Apache 2.0.
